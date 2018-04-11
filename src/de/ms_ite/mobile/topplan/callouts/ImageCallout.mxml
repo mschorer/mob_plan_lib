@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark"
+		   xmlns:ns="de.ms_ite.mobile.*" 
+		   xmlns:ns1="de.ms_ite.mobile.topplan.components.*"
+		   implements="de.ms_ite.mobile.topplan.IImagePreviewContainer"
+		   creationComplete="initUI(event)"
+		   focusOut="handleClose(event)" 
+		   click="handleClose( event)">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			protected var source:Object;
+			protected var _busy:Boolean = false;
+			
+			protected function initUI(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				
+				if ( source != null && iSnapshot != null) {
+					iSnapshot.source = source;
+					lName.text = source as String;
+				} else {
+					lName.text = '---';
+				}
+			}
+
+			public function set title( s:String):void {
+				name = s;
+			}
+
+			public function show(owner:DisplayObjectContainer, modal:Boolean = false):void {
+				open( owner, modal);
+			}
+
+			public function set image( dest:Object):void {
+				source = dest;
+				if ( iSnapshot != null) {
+					iSnapshot.source = source;
+					lName.text = source.toString();
+				}
+			}
+			
+			public function set busy( b:Boolean):void {
+				_busy = b;
+//				bcProgress.visible = b;
+				if ( biStatus != null) biStatus.visible = b;
+				if ( progBar != null) progBar.visible = b;
+			}
+			
+			public function set progress( p:int):void {
+//				lProgress.text = ""+p+"%";
+				if ( progBar != null) progBar.progress = p;
+//				progBar.visible = ( p < 100);
+			}
+			
+			protected function handleClose(event:Event):void {
+				// TODO Auto-generated method stub
+				this.close();
+				trace( "closed.");
+			}			
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<s:Image id="iSnapshot" width="560" height="420"/>
+	<ns1:ProgressBar id="progBar" visible="{_busy}" top="5" right="5" width="200" />
+	<s:BusyIndicator id="biStatus" visible="{_busy}" top="20" right="5" />
+	<s:Label id="lName" right="5" bottom="5" styleName="imageUrlInfo"/>
+</s:Callout>

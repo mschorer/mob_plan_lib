@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  creationComplete="initUI(event)" gap="0">
+	<fx:Metadata>
+		[Event(name="change", type="flash.events.Event")]
+	</fx:Metadata>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.components.DropDownList;
+			import spark.components.HGroup;
+			import spark.components.Spinner;
+			import spark.components.SpinnerList;
+			import spark.components.SpinnerListContainer;
+			import spark.components.supportClasses.ListBase;
+			import spark.events.IndexChangeEvent;
+
+			protected var _actionTypes:ArrayCollection = AppSettings.getActions();
+			protected var _statusTypes:ArrayCollection = AppSettings.getStatus();
+			
+			protected var _actionId:int = -1;
+			protected var _statusId:int = -1;
+			
+			protected var _actionSel:ListBase;
+			protected var _statusSel:ListBase
+			
+//			protected var _typeTag:String;
+//			protected var _uiMatches:Boolean = false;
+			
+			protected function initUI(event:FlexEvent):void {			
+				debug( "init");
+				
+//mschorer				if ( ! _uiMatches) selectTopDown( xmlTypes);
+			}
+			
+			override protected function createChildren():void {
+
+				if ( AppSettings.isDesktop) {
+					var c:HGroup = new HGroup();
+					c.percentWidth = 100;
+					
+					addElement( c);
+					
+					var sl:DropDownList = new DropDownList();
+					sl.requireSelection = true;
+					sl.labelField = "label";
+					sl.percentWidth = 50;
+					sl.addEventListener( Event.CHANGE, statusChanged);
+					sl.setStyle( 'interactionMode', 'mouse');
+					c.addElement( sl);
+					_statusSel = sl;
+					
+					var al:DropDownList = new DropDownList();
+					al.requireSelection = true;
+					al.labelField = "label";
+					al.percentWidth = 50;
+					al.addEventListener( Event.CHANGE, actionChanged);
+					al.setStyle( 'interactionMode', 'mouse');
+					c.addElement( al);
+					_actionSel = al;
+				} else {
+					var dlc:SpinnerListContainer = new SpinnerListContainer();
+					dlc.percentWidth = 100;
+					dlc.height = 140;
+					
+					addElement( dlc);
+					
+					var spl:SpinnerList = new SpinnerList();
+					spl.labelField = "label";
+					spl.percentWidth = 50;
+					spl.addEventListener( Event.CHANGE, statusChanged);
+					spl.wrapElements = false;
+//						spl.selectedIndex = 1;
+					dlc.addElement( spl);
+					_statusSel = spl;
+					
+					var apl:SpinnerList = new SpinnerList();
+					apl.labelField = "label";
+					apl.percentWidth = 50;
+					apl.addEventListener( Event.CHANGE, actionChanged);
+					apl.wrapElements = false;
+					//						spl.selectedIndex = 1;
+					dlc.addElement( apl);
+					_actionSel = apl;
+				}
+
+				_statusSel.dataProvider = _statusTypes;
+				_actionSel.dataProvider = _actionTypes;
+				
+				super.createChildren();
+			}
+			
+			public function get action():XML {
+				return _actionSel.selectedItem;
+			}
+
+			public function get actionID():int {
+				return _actionId;
+			}
+			
+			public function set actionID( id:int):void {
+				for( var i:int = 0; i < _actionTypes.length; i++) {
+					if ( _actionTypes.getItemAt( i).data == id) {
+						_actionSel.selectedIndex = i;
+						_actionId = id;
+						return;
+					}
+				}
+				
+				_actionSel.selectedIndex = -1;
+				_actionId = -1;
+			}				
+			
+			public function get status():XML {
+				return _statusSel.selectedItem;
+			}
+			
+			public function get statusID():int {
+				return _statusId;
+			}
+			
+			public function set statusID( id:int):void {
+				for( var i:int = 0; i < _statusTypes.length; i++) {
+					if ( _statusTypes.getItemAt( i).data == id) {
+						_statusSel.selectedIndex = i;
+						_statusId = id;
+						return;
+					}
+				}
+				
+				_statusSel.selectedIndex = -1;
+				_statusId = -1;
+			}
+			
+			protected function statusChanged( evt:IndexChangeEvent):void {
+				_statusId = (_statusSel.selectedIndex >= 0) ? _statusSel.selectedItem.data : -1;
+				
+				debug( "change status to ["+_statusId+"]");
+				dispatchEvent( new Event( Event.CHANGE));
+			}
+
+			protected function actionChanged( evt:IndexChangeEvent):void {
+				_actionId = (_actionSel.selectedIndex >= 0) ? _actionSel.selectedItem.data : -1;
+				
+				debug( "change action to ["+_actionId+"]");
+				dispatchEvent( new Event( Event.CHANGE));
+			}
+			
+			protected function debug( s:String):void {
+//				trace( this.className+": "+s);
+			}			
+			
+		]]>
+	</fx:Script>
+	<s:Label id="lActionStatus" paddingTop="4" text="Status/Aktion:" styleName="spinnerLabel"/>
+	<!--s:SpinnerListContainer width="100%" height="140">
+		<s:SpinnerList id="spStatus" height="100%" width="50%" wrapElements="false"/>
+		<s:SpinnerList width="20" height="100%" enabled="false" labelField="name"
+					   selectedIndex="1">
+			<s:ArrayList>
+				<fx:Object name="-" data="-1"></fx:Object>
+			</s:ArrayList>
+		</s:SpinnerList>
+		<s:SpinnerList id="spAction" height="100%" width="50%" wrapElements="false"/>
+	</s:SpinnerListContainer -->
+</s:VGroup>

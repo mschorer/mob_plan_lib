@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				   xmlns:s="library://ns.adobe.com/flex/spark"
+				   xmlns:mx="library://ns.adobe.com/flex/mx"
+				   xmlns:editors="de.ms_ite.mobile.topplan.editors.*"
+				   cornerRadius="4"
+				   creationComplete="initUI(event)"
+				   width="100%" >
+<!-- 				   backgroundColor.info="0xe0e0f0"
+				   backgroundColor.label="0xf0f0c0"
+				   backgroundColor.post="0xd0d0d0"
+				   backgroundColor.sign="0xa0f0a0"
+				   backgroundColor.subsign="0xa0a0f0" -->
+	<!-- s:states>
+		<s:State name="default"/>
+		<s:State name="post"/>
+		<s:State name="sign"/>
+		<s:State name="subsign"/>
+		<s:State name="label"/>
+		<s:State name="info"/>
+	</s:states -->
+	<s:layout>
+		<s:HorizontalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.Signs;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.SignsItem;
+			import models.SignsModel;
+			
+			import mx.events.FlexEvent;
+			
+			protected var _item:SignsItem;
+			protected var _typeNode:XML;
+			
+			protected var _siEdit:ItemEditor = null;
+			
+			protected function initUI(event:FlexEvent):void {
+			}
+			
+			public function setupDependent():void {
+//				debug( "dependent ... ["+(( _siEdit != null) ? "OK" : "NULL")+"]");
+				
+				if ( _siEdit == null) {
+					_siEdit = new ItemEditor();
+					_siEdit.percentWidth = 100;
+					_siEdit.minHeight = 60;
+					
+					editContainer.addElement( _siEdit);
+					
+					_siEdit.addEventListener( TopEvent.ITEM_SAVED, handleItemUpdate);
+					_siEdit.addEventListener( TopEvent.ITEM_ADD, handleItemUpdate);
+
+				}
+				
+				_siEdit.item = _item;
+				updateView();
+
+				if ( _siEdit != null) _siEdit.presetDependent();
+			}
+			
+			public function set item( dest:SignsItem):void {
+				_item = dest;
+				if ( _item != null && _siEdit != null && _siEdit.item != _item) {
+					_siEdit.item = _item;
+					updateView();
+				}
+			}
+			
+			public function get item():SignsItem {
+				return (_siEdit != null) ? _siEdit.item : _item;
+			}
+			
+			protected function handleItemUpdate( evt:TopEvent):void {
+				updateView();
+			}
+			
+			public function updateView():void {
+				var nd:String = _item.type.toString( 16).toLowerCase();
+//				getTypePath( nd);
+//				currentState = getRenderMode();
+				
+				switch( _item.state) {
+					case SignsModel.STATE_NEW:
+						bNew.label = "Neuplanung";
+						bAdd.visible = bAdd.includeInLayout = true;
+						bOptions.enabled = false;
+						bAppend.enabled = false;
+						break;
+					
+					default:
+						bNew.label = "Speichern";
+						bAdd.visible = bAdd.includeInLayout = false;
+						bOptions.enabled = true;
+						bAppend.enabled = true;
+				}
+			}
+			
+			protected function getTypePath( nd:String):String {
+				
+				var xNode:XMLList = AppSettings.itemTypeXML.(@data==nd);
+				if ( xNode.length() == 0) xNode = AppSettings.itemTypeXML.descendants().(@data==nd);
+				
+				var node:XML = (xNode.length() > 0) ? xNode[0] : null;
+				_typeNode = node;
+				
+				var path:String = '';
+				while ( node != null) {
+					path = node[0].@name + ((path.length > 0) ? ' - ' : '') + path;
+					
+					node = node.parent();
+				}
+				
+				return ( path.length > 0) ? path : nd;
+			}
+			
+			protected function getRenderMode():String {
+				var renderMode:String = 'default';
+				var nd:XML = _typeNode;
+				
+				while( nd != null) {
+					if ( "@render" in nd) {
+						renderMode = nd.@render;
+						break;
+					}
+					nd = nd.parent();
+				}
+				
+				return renderMode;
+			}
+			
+			protected function appendItem( evtent:Event):void {
+					
+				var evt:TopEvent = new TopEvent( TopEvent.ITEM_NEW, true);
+				
+				evt.item_id = (_item != null) ? _item.id : -1;
+				evt.user_id = AppSettings.getUser().id;
+				evt.item = _item;
+				evt.parent = this;
+				
+				dispatchEvent( evt);
+				
+				debug( "add item ["+evt.item_id+"] ["+evt.type+"]");
+			}
+			
+			protected function saveItem( evt:Event):void {
+				if ( _siEdit != null) _siEdit.doSave( evt.target == bNew);
+
+				updateView();
+			}
+			
+			protected function handleOptions( event:Event):void {
+				debug( "options");
+				
+				var evt:TopEvent = new TopEvent( TopEvent.ITEM_OPTIONS, true);
+//				evt.item_id = SignsItem( _item).id;
+//				evt.user_id = AppSettings.getUser().id;
+				evt.item = _item;
+				evt.parent = this;	//bOptions;
+				evt.editor = _siEdit;
+				
+				dispatchEvent( evt);
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}
+		]]>
+	</fx:Script>
+	<!-- editors:ItemEditor id="_siEdit" width="100%" minHeight="60"/ -->
+	<s:Group id="editContainer" width="100%" minHeight="60">
+		<s:layout>
+			<s:BasicLayout/>
+		</s:layout>
+	</s:Group>
+	<s:VGroup height="100%" horizontalAlign="right">
+		<s:Button id="bNew" width="100%" label="Neu" click="saveItem( event)"/>
+		<s:Button id="bAdd" width="100%" label="Bestand" click="saveItem( event)"/>
+		<s:Button id="bOptions" width="100%" label="Options" click="handleOptions( event)"/>
+		<s:Spacer width="100%" height="100%"/>
+		<s:Button id="bAppend" width="100%" label="+" click="appendItem( event);" emphasized="true"/>
+	</s:VGroup>
+</s:BorderContainer>

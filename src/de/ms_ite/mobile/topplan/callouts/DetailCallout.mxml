@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark"
+		   xmlns:ns="de.ms_ite.mobile.*"
+		   width="100%" height="100%">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			protected var _data:Object;
+			
+			public function set data( dest:Object):void {
+				if ( dest == null) return;
+				
+				_data = dest;
+				if ( info != null) info.data = _data;
+			}
+			
+			public function get data():Object {
+				return _data;
+			}
+			
+			protected function handleClose(event:Event):void {
+				// TODO Auto-generated method stub
+				this.close();
+				trace( "closed.");
+			}
+			
+			protected function updateContent(event:FlexEvent):void
+			{
+				// TODO Auto-generated method stub
+				if ( _data != null) info.data = _data;
+				
+				info.addEventListener( Event.CANCEL, handleClose);
+				info.addEventListener( Event.CLOSE, handleClose);
+			}
+		]]>
+	</fx:Script>
+	<ns:PoiPanel id="info" width="100%" height="100%" creationComplete="updateContent(event)"/>
+</s:Callout>

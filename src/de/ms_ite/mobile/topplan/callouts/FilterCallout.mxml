@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark" 
+		   xmlns:ns="de.ms_ite.mobile.topplan.components.*" open="handleOpen(event)"
+		   creationComplete="initUI(event)" close="handleClose( event);" xmlns:ns1="de.ms_ite.mobile.topplan.filters.*">
+		   <!-- width="250" -->
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.maptech.Bounds;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.RetrievalParameters;
+			import models.SignsLocation;
+			
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			
+			import spark.events.PopUpEvent;
+			
+			protected function initUI(event:FlexEvent):void {
+				PopUpManager.centerPopUp( this);
+			}
+			
+			protected function handleOpen(event:PopUpEvent):void {
+				
+			}
+			/*			
+			public function get pageSize():int {
+			return lfc.pageSize;
+			}
+			
+			public function get filterTagIDs():Array {
+			return lfc.filterTagIDs;
+			}
+			
+			public function get nameFilter():String {
+			return lfc.nameFilter;
+			}
+			*/			
+			public function getFilter( loc:SignsLocation, view:Bounds, lon:Number, lat:Number):RetrievalParameters {
+				return lfc.getFilter( loc, view, lon, lat);
+			}
+			
+			public function preset():void {
+				
+			}
+			
+			protected function handleClose( evt:Event):void {
+				debug( "close");
+				close( true);
+			}
+			
+			protected function submitData(event:Event):void {
+				debug( "submit");
+				close( true);
+				callLater( sendComplete);
+			}
+			
+			protected function sendComplete():void {
+				dispatchEvent( new Event( Event.COMPLETE));
+			}
+			
+			protected function debug( txt:String):void {
+				trace( this.className+": "+txt);
+			}
+			/*			
+			protected function handleOpen(event:PopUpEvent):void {
+			lfc.attachFilter();
+			}
+			*/			
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<ns1:LocationFilterComponent id="lfc" complete="submitData(event)" width="100%" height="100%"/>
+</s:Callout>

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" width="400" height="300">
+	<fx:Declarations>
+		<s:DateTimeFormatter id="fmt" dateTimePattern="yyyyMMdd_HHmmss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.callouts.ImageCallout;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import flash.filesystem.File;
+			import flash.filesystem.FileMode;
+			import flash.filesystem.FileStream;
+			
+			import models.SignsAction;
+			import models.SignsItem;
+			
+			private var dataSource:IDataInput;
+			
+			protected var cameraRoll:CameraRoll;
+			protected var cameraUI:CameraUI;
+			protected var imageCallout:ImageCallout;
+			
+			protected var imgPromise:MediaPromise;
+			//				protected var upl:File;
+			
+			protected var attachToItem:SignsItem = null;
+			protected var calloutParent:DisplayObjectContainer;
+			
+			protected var uploadProgress:int;
+
+			public function itemBrowseForFile( evt:TopEvent):void {
+				var f:File = AppSettings.persistantStorage.resolvePath( AppSettings.localImagePath);
+				
+				attachToItem = evt.item;
+				calloutParent = evt.parent;
+				
+				f.addEventListener( Event.SELECT, onFileSelected);
+				f.browseForOpen( "Choose a file to attach ...");
+			}
+			
+			public function itemSelectCameraRoll( evt:TopEvent):void {
+				if ( CameraRoll.supportsBrowseForImage) {
+					
+					attachToItem = evt.item;
+					calloutParent = evt.parent;
+					
+					debug("camera roll ["+attachToItem+"]");
+					if (cameraRoll == null) {
+						
+						cameraRoll = new CameraRoll();
+						cameraRoll.addEventListener( MediaEvent.SELECT, handleSnapshot);
+					}
+					
+					cameraRoll.browseForImage();
+				}
+			}
+			
+			public function itemDoSnapshot( evt:TopEvent):void {
+				
+				attachToItem = evt.item;
+				calloutParent = evt.parent;
+				
+				debug( "camera shot ["+attachToItem+"]");
+				
+				if ( cameraUI == null) {
+					cameraUI = new CameraUI();
+					
+					cameraUI.addEventListener( MediaEvent.COMPLETE, handleSnapshot);
+				}
+				
+				cameraUI.launch(MediaType.IMAGE);
+			}
+			
+			protected function handleSnapshot(event:MediaEvent):void {
+				imgPromise = event.data;
+				debug( "img promise: "+imgPromise);
+				
+				dataSource = imgPromise.open();
+				if( imgPromise.isAsync ) { 
+					debug( "Asynchronous media promise." ); 
+					(dataSource as IEventDispatcher).addEventListener( Event.COMPLETE, onMediaLoaded ); 
+				} else { 
+					debug( "Synchronous media promise ["+imgPromise.file.url+"]" ); 
+					uploadFileForItem( imgPromise.file); 
+				}
+			}
+			
+			private function onMediaLoaded( event:Event ):void { 
+				debug("Media available"); 
+				
+				var file:File;
+				
+				if ( imgPromise.file == null) {
+					var d:Date = new Date();
+					var fname:String = AppSettings.localImagePath+"/"+"IMG_"+fmt.format( d)+".jpg";
+					
+					debug("  creating file ["+fname+"] #"+dataSource.bytesAvailable+"."); 
+					
+					file = AppSettings.persistantStorage.resolvePath( fname);
+					
+					var fileStream:FileStream = new FileStream();
+					fileStream.open(file, FileMode.WRITE);
+					
+					var buffer:ByteArray = new ByteArray();
+					
+					dataSource.readBytes( buffer);
+					fileStream.writeBytes( buffer);
+					
+					fileStream.close();
+					
+					debug( "copied #["+buffer.length+"]");
+				} else {
+					debug( "  using file.");
+					
+					file = imgPromise.file;
+				}
+				
+				uploadFileForItem( file); 
+			}
+			
+			private function onFileSelected( evt:Event):void {
+				var f:File = File( evt.target);
+				
+				uploadFileForItem( f);
+			}
+			
+			private function uploadFileForItem( imgFile:File):void {					
+				// upload local file
+				
+				//					var imgFile:File = imgPromise.file;
+				
+				if ( imageCallout == null) {
+					imageCallout = new ImageCallout();
+				}
+				
+				imageCallout.image = imgFile.url;
+				//				data.Fotopfad = imgFile.nativePath;
+				
+				var rc:String = null;
+				if ( AppSettings.online) {
+					imageCallout.busy = true;
+					
+					//						uploadFile( imgFile);
+					
+					attachToItem.addEventListener( ProgressEvent.PROGRESS, onUploadProgress);
+					attachToItem.addEventListener( Event.COMPLETE, onUploadComplete);
+					
+					rc = attachToItem.uploadFile( AppSettings.uploadScriptUrl, AppSettings.imageRootPath, AppSettings.imageOffsetPath, imgFile);
+				}
+
+				imageCallout.open( calloutParent, false);
+
+				var ae:TopEvent = new TopEvent( TopEvent.ITEM_ATTACHED, true);
+				ae.cache_url = imgFile.url;
+				ae.url = rc;
+				
+				dispatchEvent( ae);
+			}
+			
+			private function onUploadProgress(event:ProgressEvent):void {
+				var pro:int = Math.round((Number(event.bytesLoaded) / Number(event.bytesTotal)) * 100);
+				if ( pro != uploadProgress) {
+					debug( "  upload: "+uploadProgress+"%");
+					uploadProgress = pro;
+					if ( imageCallout != null) imageCallout.progress = pro;
+				}
+			}
+			
+			// Called on upload complete
+			private function onUploadComplete(event:Event):void {
+				if ( imageCallout) imageCallout.busy = false;
+				
+				attachToItem.removeEventListener( ProgressEvent.PROGRESS, onUploadProgress);
+				attachToItem.removeEventListener( Event.COMPLETE, onUploadComplete);
+				
+				debug( "upload done.");
+			}
+			
+			//===========================================================================================================
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}				
+
+		]]>
+	</fx:Script>
+</s:Group>

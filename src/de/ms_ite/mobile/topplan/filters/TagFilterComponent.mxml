@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				   xmlns:s="library://ns.adobe.com/flex/spark"
+				   xmlns:ns="de.ms_ite.mobile.topplan.components.*" 
+				   implements="de.ms_ite.mobile.topplan.filters.FilterSpec"
+				   borderStyle="inset" cornerRadius="3" creationComplete="initUI(event)">
+	<s:layout>
+		<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Metadata>
+		[Event("complete", type="flash.events.Event")]
+	</fx:Metadata>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.TagWrapper;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.RetrievalParameters;
+			import models.SignsAction;
+			import models.SignsItem;
+			import models.SignsTag;
+			import models.SignsTagMap;
+			import models.SignsUser;
+			import models.StatusModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			private var FilterSettings:ArrayCollection = new ArrayCollection([
+				{label:"Alle", data:-1},
+				{label:"Regionen", data:1},
+				{label:"Rad", data:3},
+				{label:"Wandern", data:4}, 
+				{label:"Überregional", data:5},
+				{label:"topplan", data:0}
+			]);
+			
+			protected var _tags:ArrayCollection;
+			protected var _tagMap:Dictionary;
+			
+			protected var _item_tags:ArrayCollection;
+			
+			protected var _tagModel:SignsTag;
+			
+			protected var _submitLabel:String;
+			
+			protected function initUI(event:FlexEvent):void {
+				debug( "initUI");
+
+				if ( _tags == null) {
+					var ownr:SignsTag = new SignsTag();
+					
+					var tl:ArrayCollection = AppSettings.tagList;
+					
+					_tags = new ArrayCollection();
+					_tagMap = new Dictionary();
+					for ( var i:int = 0; i < tl.source.length; i++) {
+						var tm:SignsTag = SignsTag( tl.source[i] /*.getItemAt( i)*/);
+				
+						var tw:TagWrapper = new TagWrapper( tm);
+						
+						_tags.addItem( tw);
+						_tagMap[ tm.cache_id] = tw;
+					}
+				}										
+				
+				if ( lTags != null) lTags.dataProvider = _tags;
+				
+				if ( _submitLabel != null && _submitLabel.length > 0) submitLabel = _submitLabel;
+				
+				bbTags.selectedIndex = 0;
+				
+				attachFilter();
+			}
+			
+			public function active():Boolean {
+				return ( selectedTagIDs.length > 0);
+			}
+			
+			public function reset():void {
+				unmarkTags();
+				_tags.refresh();
+			}
+
+			public function attachFilter(event:Event = null):void {
+				debug( "activate");
+				
+				_tags.filterFunction = filter;
+				_tags.refresh();
+
+				submitLabel = ( _submitLabel != null) ? _submitLabel : '';
+			}
+		
+			public function set submitLabel( l:String):void {
+				_submitLabel = l;
+				
+				if ( bSave == null) return;
+				
+				if ( _submitLabel.length > 0) {
+					bSave.label = _submitLabel;
+					bSave.visible = bSave.includeInLayout = true;
+				} else {
+					bSave.visible = bSave.includeInLayout = false;
+				}
+			}
+			
+			public function get tagList():ArrayCollection {
+				return _tags;
+			}
+			
+			public function set tagMap( it:ArrayCollection):void {
+
+				unmarkTags();
+				
+				_item_tags = it;
+				
+				markTags();
+			}
+			
+			protected function markTags():void {
+				if ( _item_tags == null) {
+					debug( "mark: #0 no tags");
+					return;
+				}
+				
+				if ( _tagMap == null) return;
+				
+				debug( "mark: #"+_item_tags.length);
+				
+				for( var i:int = 0; i < _item_tags.length; i++) {
+					var mapItem:SignsTagMap = SignsTagMap( _item_tags.getItemAt( i));
+					var ow2:TagWrapper = _tagMap[ mapItem.cache_tag_id];
+					
+					if ( ow2 != null) {
+						ow2.mapItem = mapItem;
+						_tags.itemUpdated( ow2);
+						
+						debug( "   add: "+ow2.toString());
+					}
+				}
+				
+				if ( lTags != null) lTags.selectedItems = null;
+			}
+			
+			public function get tagMap():ArrayCollection {
+				
+				return _item_tags;
+			}
+			
+			public function get selectedTagIDs():Array {
+				debug( "selected:");
+				
+				var filterIDs:Array = new Array();
+				
+				for( var i:int = 0; i < _tags.length; i++) {
+					var tw:TagWrapper = TagWrapper( _tags.getItemAt( i));
+					
+					if ( tw.selected) filterIDs.push( tw.item.cache_id);
+				}				
+				
+				return filterIDs;
+			}
+			
+			public function unmarkTags():void {
+				debug( "unmark all.");
+				
+//				tiFilter.text = '';
+//				attachFilter();
+				
+				if ( _tags == null) return;
+				
+				for( var i:int = 0; i < _tags.length; i++) {
+					var tw:TagWrapper = TagWrapper( _tags.getItemAt( i));
+					tw.mapItem = null;
+					_tags.itemUpdated( tw);
+				}
+			}
+			
+			protected function saveChanges(event:Event):void {
+				debug( "submit");
+				dispatchEvent( new Event( Event.COMPLETE));
+			}
+			
+			protected function updateFilter(event:Event):void {
+				_tags.refresh();
+				markTags();
+			}
+			
+			protected function filterFocus(event:FocusEvent):void {
+				cbFiltEnable.selected = true;
+			}
+			
+			protected function handleTab( evt:Event):void {
+				_tags.refresh();
+			}
+			
+			protected function filter( obj:Object):Boolean {
+				var fil:int = (bbTags.selectedItem != null) ? ( bbTags.selectedItem.data as int) : -1;
+				
+				if ( fil >= 0 && obj.parent_id != fil) return false;
+				
+				if ( tiFilter == null || ! cbFiltEnable.selected || tiFilter.text == '' || tiFilter.text == '*') return true;
+				
+				var ow:TagWrapper = TagWrapper( obj);
+				
+				return ( ow.selected || ow.label.toLowerCase().indexOf( tiFilter.text.toLowerCase()) >= 0);
+			}
+			
+			protected function selectionChanged( evt:Event):void {
+				dispatchEvent( new Event( Event.CHANGE, true));
+			}
+						
+			//===========================================================================================================
+
+			protected function debug( txt:String):void {
+//				trace( this.className+": "+txt);
+			}			
+		]]>
+	</fx:Script>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:CheckBox id="cbFiltEnable" label="Tags filtern" change="updateFilter( event)"/>
+		<s:TextInput id="tiFilter" width="200" focusIn="filterFocus(event)" change="updateFilter( event)"/>
+		<s:Spacer width="100%" height="100%"/>
+		<s:Button id="bSave" label="{_submitLabel}" click="saveChanges( event)"/>
+	</s:HGroup>
+	<s:ButtonBar id="bbTags" requireSelection="true" dataProvider="{FilterSettings}" change="handleTab( event)"/>
+	<s:BorderContainer width="100%" height="100%" backgroundColor="0xe0e0e0" borderColor="0"
+					   borderWeight="1" contentBackgroundColor="0xe0e0e0" cornerRadius="5" horizontalCenter="0"
+					   verticalCenter="0">
+		<s:layout>
+			<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+		</s:layout>
+		<s:List id="lTags" width="100%" height="100%" itemRenderer="de.ms_ite.mobile.topplan.renderer.MapItemRenderer"
+				allowMultipleSelection="true" horizontalScrollPolicy="off" change="selectionChanged( event);">
+			<s:layout>
+				<s:TileLayout orientation="rows" columnWidth="150" requestedColumnCount="5" requestedRowCount="5"/>
+			</s:layout>
+		</s:List>
+	</s:BorderContainer>
+</s:BorderContainer>

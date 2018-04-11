@@ -1,0 +1,1058 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:ns1="de.ms_ite.maptech.containers.*"
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		xmlns:components="de.ms_ite.mobile.topplan.components.*"
+		actionBarVisible="true" activate="onActivateApp( event);" creationComplete="initUI( event);"
+		deactivate="onDeactivateApp(event);" implements="de.ms_ite.mobile.topplan.ILocationProvider"
+		overlayControls="false" tabBarVisible="true">
+	<s:layout>
+		<s:BasicLayout />
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.*;
+			
+			import flash.data.SQLResult;
+			
+			import de.ms_ite.maptech.*;
+			import de.ms_ite.maptech.cache.ContentCachePersistent;
+			import de.ms_ite.maptech.cache.LoadQueueCaching;
+			import de.ms_ite.maptech.cache.LoadQueuePreloading;
+			import de.ms_ite.maptech.containers.CompatLayer;
+			import de.ms_ite.maptech.containers.MetaLayer;
+			import de.ms_ite.maptech.layers.*;
+			import de.ms_ite.maptech.mapinfo.*;
+			import de.ms_ite.maptech.symbols.*;
+			import de.ms_ite.maptech.symbols.styles.*;
+			import de.ms_ite.maptech.tools.*;
+			import de.ms_ite.mobile.*;
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.callouts.*;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.map.MobileSymbol;
+			
+			import flash.sensors.Accelerometer;
+			import flash.sensors.Geolocation;
+			
+			import models.GpsPos;
+			import models.Model;
+			import models.RetrievalParameters;
+			import models.SignsOwner;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.*;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.ArrayUtil;
+			
+			import spark.core.ContentCache;
+			import spark.events.IndexChangeEvent;
+
+			
+			protected var g:Geolocation;
+			
+			protected var accelerometer:Accelerometer;
+			protected var cameraUI:CameraUI;
+			
+			protected var firstPos:Boolean = true;
+			protected var geoPos:GpsPos;
+			protected var _gpsOnline:Boolean = false;
+			
+			protected var gestureScale:Number = 1;
+			
+			protected var _viewPort:Bounds;
+			protected var bounds:Bounds;
+			protected var mi:MapInfo;
+			
+			protected var miOvlRad:MapInfoWMTS;
+			protected var miOvlMtb:MapInfoWMTS;
+			protected var miOvlWnd:MapInfoWMTS;
+			protected var miOvlLoi:MapInfoWMTS;
+			
+//			protected var mapCache:ContentCachePersistent;
+			
+			protected var baseMapLayer:AdaptiveLayer;
+			
+			protected var preloadLayer:MapLayer;
+			protected var preloadLayerRad:MapLayer;
+			protected var preloadLayerMtb:MapLayer;
+			protected var preloadLayerWan:MapLayer;
+			protected var preloadLayerLoi:MapLayer;
+			protected var preloadIndex:int;
+			protected var preloadMin:int = 10;
+			protected var preloadMax:int = 13;
+			protected var _preloading:Boolean = false;
+
+			protected var radOvlLayer:AdaptiveLayer;
+			protected var mtbOvlLayer:AdaptiveLayer;
+			protected var wndOvlLayer:AdaptiveLayer;
+			protected var loiOvlLayer:AdaptiveLayer;
+			
+			protected var mapLayers:Array;
+			
+			protected var loadQueue:LoadQueueCaching;
+			protected var preloadQueue:LoadQueuePreloading;
+			
+			protected var defStyle:SymbolStyle;
+			protected var ownerStyle:SymbolStyle;
+			protected var posStyle:SymbolStyle;
+			
+			protected var ownerLayer:SymbolLayer;
+			protected var symbolLayer:SymbolLayer;
+			protected var gpsLayer:SymbolLayer;
+			
+			protected var it:SignsOwner;
+			
+			//			protected var mbase:MapInfo, movl:MapInfo;
+			
+			protected var _dataProvider:ArrayCollection;
+			protected var dataproviderPosition:ArrayCollection;
+			protected var dataproviderOwner:ArrayCollection;
+			
+			protected var simTimer:Timer;
+			
+			protected var bSize:int;
+			
+			[Bindable]
+			protected var maplist:ArrayCollection;
+			
+			[Bindable]
+			protected var vislist:ArrayCollection;
+			
+			protected var imageCallout:ImageCallout;
+			protected var poiCallout:DetailCallout;
+			
+			
+			protected function initUI( event:Event):void {
+				debug( "initUI.");
+				
+				maplist = new ArrayCollection();
+				vislist = new ArrayCollection();
+				
+				_dataProvider = new ArrayCollection();	// symData);
+				dataproviderPosition = new ArrayCollection();	// symChart);
+				dataproviderOwner = new ArrayCollection();
+				
+				geoPos = new GpsPos();
+				geoPos.title = 'You are here!';
+				geoPos.longitude = 10.8564448;
+				geoPos.latitude = 48.0483389;
+				geoPos.heading = 0;
+				geoPos.horizontalAccuracy = 1000;
+				geoPos.verticalAccuracy = 1000;
+				
+				dataproviderPosition.addItem( geoPos); 
+				
+				mapLayers = new Array();
+				
+				// Draw a square and add it to the display list.
+				
+				maplist = new ArrayCollection();
+				
+//				var item:Object;
+//				var lay:MapLayer;
+				
+				loadQueue = new LoadQueueCaching();
+				loadQueue.PARLOADS = 5;
+				loadQueue.addEventListener( ProgressEvent.PROGRESS, handleProgress);
+				loadQueue.addEventListener( Event.COMPLETE, loadComplete);
+
+				preloadQueue = new LoadQueuePreloading();
+				preloadQueue.PARLOADS = 5;
+				preloadQueue.addEventListener( ProgressEvent.PROGRESS, handlePreProgress);
+				preloadQueue.addEventListener( Event.COMPLETE, preloadComplete);
+/*				
+				mapCache = new ContentCachePersistent();
+				mapCache.enableCaching = true;
+				mapCache.enableQueueing = true;
+				mapCache.maxActiveRequests = 2;
+				mapCache.maxCacheEntries = 25;
+				debug( "cache: #["+mapCache.numCacheEntries+"]");
+				*/				
+
+				mi = new MapInfoOpenStreetMap();
+/*
+				Radwegenetz (rot):
+				http://wms.touvia.de/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:radwegenetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:7&TILECOL=67&TILEROW=44&FORMAT=image/png
+				
+				Mountainbikenetz (magenta):
+				http://wms.touvia.de/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:mountainbikenetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:7&TILECOL=67&TILEROW=44&FORMAT=image/png
+				
+				Wanderwegenetz (blau):
+				http://wms.touvia.de/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:wanderwegenetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:7&TILECOL=67&TILEROW=44&FORMAT=image/png
+				
+				Loipennetz (braun):
+				http://wms.touvia.de/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:loipennetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:7&TILECOL=67&TILEROW=44&FORMAT=image/png
+*/
+				//http://46.137.75.201/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:wegenetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:%1&TILECOL=%2&TILEROW=%3&FORMAT=image/png
+				miOvlRad = new MapInfoWMTS( "http://wms.topplan.de/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:radwegenetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:%1&TILECOL=%2&TILEROW=%3&FORMAT=image/png", 'WMTS_Rad');
+				miOvlWnd = new MapInfoWMTS( "http://wms.topplan.de/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:wanderwegenetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:%1&TILECOL=%2&TILEROW=%3&FORMAT=image/png", 'WMTS_Wandern');
+				miOvlMtb = new MapInfoWMTS( "http://wms.topplan.de/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:mountainbikenetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:%1&TILECOL=%2&TILEROW=%3&FORMAT=image/png", 'WMTS_Mtb');
+				miOvlLoi = new MapInfoWMTS( "http://wms.topplan.de/geoserver/gwc/service/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=topplan:loipennetz&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:%1&TILECOL=%2&TILEROW=%3&FORMAT=image/png", 'WMTS_Loipen');
+				
+				tl.mapInfo = mi;
+				tl.viewport = mi.bounds.clone();
+
+				//----------------------------------------------------
+				
+				baseMapLayer = new AdaptiveLayer();
+				
+				baseMapLayer.loadQueue = loadQueue;
+				//baseMapLayer.contentCache = mapCache;
+				
+				baseMapLayer.mapInfo = mi;
+				baseMapLayer.priority = 10;
+				tl.addChild( baseMapLayer);
+				
+				baseMapLayer.addEventListener( Event.CHANGE, trackMap);
+				
+				preloadLayer = new MapLayer();
+//				preloadLayer.tileClass = null;
+				preloadLayer.loadQueue = preloadQueue;
+
+				preloadLayerRad = new MapLayer();
+//				preloadLayerRad.tileClass = null;
+				preloadLayerRad.loadQueue = preloadQueue;
+				preloadLayerMtb = new MapLayer();
+//				preloadLayerMtb.tileClass = null;
+				preloadLayerMtb.loadQueue = preloadQueue;
+				preloadLayerWan = new MapLayer();
+//				preloadLayerWan.tileClass = null;
+				preloadLayerWan.loadQueue = preloadQueue;
+				preloadLayerLoi = new MapLayer();
+//				preloadLayerLoi.tileClass = null;
+				preloadLayerLoi.loadQueue = preloadQueue;
+				//baseMapLayer.contentCache = mapCache;
+				
+				preloadLayer.mapInfo = mi;
+				preloadLayer.priority = 5;
+				preloadLayer.layer = 2;	//preloadMin;
+				preloadLayer.visible = false;
+				tl.addChild( preloadLayer);
+
+				preloadLayerRad.mapInfo = miOvlRad;
+				preloadLayerRad.priority = 10;
+				preloadLayerRad.layer = 2;	//preloadMin;
+				preloadLayerRad.visible = false;				
+				tl.addChild( preloadLayerRad);
+				
+				preloadLayerMtb.mapInfo = miOvlMtb;
+				preloadLayerMtb.priority = 11;
+				preloadLayerMtb.layer = 2;	//preloadMin;
+				preloadLayerMtb.visible = false;				
+				tl.addChild( preloadLayerMtb);
+				
+				preloadLayerWan.mapInfo = miOvlWnd;
+				preloadLayerWan.priority = 12;
+				preloadLayerWan.layer = 2;	//preloadMin;
+				preloadLayerWan.visible = false;				
+				tl.addChild( preloadLayerWan);
+				
+				preloadLayerLoi.mapInfo = miOvlLoi;
+				preloadLayerLoi.priority = 13;
+				preloadLayerLoi.layer = 2;	//preloadMin;
+				preloadLayerLoi.visible = false;				
+				tl.addChild( preloadLayerLoi);
+
+				maxLevel.minimum = 0;
+				maxLevel.maximum = mi.layers-1;
+				maxLevel.value = 12;
+				
+				preLevel.minimum = 0;
+				preLevel.maximum = mi.layers-1;
+				
+				viewLevel.minimum = 0;
+				viewLevel.maximum = mi.layers-1;
+				
+				//----------------------------------------------------
+				
+//				mapLayer.tileClass = de.ms_ite.maptech.tools.SmoothTile;
+//				mapLayer.scaleMode = AdaptiveLayer.SCALE_UP;
+				
+				radOvlLayer = new AdaptiveLayer();	
+				radOvlLayer.loadQueue = loadQueue;
+				//baseMapLayer.contentCache = mapCache;
+				
+				radOvlLayer.mapInfo = miOvlRad;
+				radOvlLayer.priority = 20;
+				tl.addChild( radOvlLayer);
+				
+				mtbOvlLayer = new AdaptiveLayer();	
+				mtbOvlLayer.loadQueue = loadQueue;
+				//baseMapLayer.contentCache = mapCache;
+				
+				mtbOvlLayer.mapInfo = miOvlMtb;
+				mtbOvlLayer.priority = 21;
+				tl.addChild( mtbOvlLayer);
+				
+				wndOvlLayer = new AdaptiveLayer();	
+				wndOvlLayer.loadQueue = loadQueue;
+				//baseMapLayer.contentCache = mapCache;
+				
+				wndOvlLayer.mapInfo = miOvlWnd;
+				wndOvlLayer.priority = 22;
+				tl.addChild( wndOvlLayer);
+				
+				loiOvlLayer = new AdaptiveLayer();	
+				loiOvlLayer.loadQueue = loadQueue;
+				//baseMapLayer.contentCache = mapCache;
+				
+				loiOvlLayer.mapInfo = miOvlLoi;
+				loiOvlLayer.priority = 23;
+				tl.addChild( loiOvlLayer);
+				
+				tl.updateView();
+				
+				//----------------------------------------------------
+				
+				posStyle = new SymbolStyle();
+				
+				posStyle.normal.line.color = 0xff8080;
+				posStyle.normal.line.width = 4;
+				
+				posStyle.selected.line.color = 0xff4040;
+				posStyle.selected.line.width = 4;
+				
+				posStyle.icon.color = 0xa0a0ff;
+				posStyle.icon.alpha = 1.0;
+				posStyle.icon.scale = 1.0;
+				posStyle.icon.icon = 'Hexa';
+				/*				
+				posStyle.data.scaleField = 'scale';
+				posStyle.data.scaleRowMin = 1;
+				posStyle.data.scaleRowMax = 20;
+				posStyle.data.scaleMin = 1;
+				posStyle.data.scaleMax = 20;
+				*/
+				defStyle = new SymbolStyle();
+				
+				defStyle.normal.line.color = 0xffffff;
+				defStyle.normal.line.width = 2;
+				defStyle.normal.surface.color = 0x8080ff;
+				defStyle.normal.surface.alpha = 0.7;
+				
+				defStyle.selected.line.color = 0xffffff;
+				defStyle.selected.line.width = 2;
+				defStyle.selected.surface.color = 0xf02020;
+				defStyle.selected.surface.alpha = 0.7;
+				
+				defStyle.icon.color = 0x0000ff;
+				defStyle.icon.alpha = 0.8;
+				defStyle.icon.scale = 1.0;
+				defStyle.icon.icon = 'Hexa';
+
+				ownerStyle = new SymbolStyle();
+				
+				ownerStyle.normal.line.color = 0xe0a000;
+				ownerStyle.normal.line.width = 1;
+				ownerStyle.normal.surface.color = 0xc0c000;
+				ownerStyle.normal.surface.alpha = 0.3;
+				
+				ownerStyle.selected.line.color = 0xc08000;
+				ownerStyle.selected.line.width = 1;
+				ownerStyle.selected.surface.color = 0xe0e000;
+				ownerStyle.selected.surface.alpha = 0.7;
+				
+				ownerLayer = new SymbolLayer();
+				ownerLayer.style = ownerStyle;
+				ownerLayer.symbolClass = de.ms_ite.mobile.topplan.map.OwnerSymbol;
+				tl.addChild( ownerLayer);
+
+				gpsLayer = new SymbolLayer();
+				gpsLayer.style = posStyle;
+				gpsLayer.symbolClass = de.ms_ite.mobile.topplan.map.GeoposSymbol;
+				tl.addChild( gpsLayer);
+				
+				symbolLayer = new SymbolLayer();
+//				sym.debugLevel = 1;
+				symbolLayer.style = defStyle;
+				symbolLayer.addEventListener( IndexChangeEvent.CHANGE, handleClick);	//ListEvent.ITEM_CLICK
+				symbolLayer.symbolClass = de.ms_ite.mobile.topplan.map.MobileSymbol;
+				tl.addChild( symbolLayer);
+				
+				if ( _viewPort != null) {
+					tl.viewport = _viewPort;
+				} else {
+					var vp:Bounds = new Bounds();
+					vp.centerx = geoPos.longitude;
+					vp.centery = geoPos.latitude;
+					tl.viewport = vp.getExpandedPx( 0.01, 0.01);
+				}
+				
+				tl.updateView();
+				symbolLayer.dataProvider = _dataProvider;
+				gpsLayer.dataProvider = dataproviderPosition;
+				ownerLayer.dataProvider = dataproviderOwner;
+				
+				Multitouch.inputMode = MultitouchInputMode.GESTURE;
+
+				handlePosCenter( null);
+				handleDataCenter( null);
+
+				handleWndToggle( null);
+				handleRadToggle( null);
+				handleMtbToggle( null);
+				handleLoiToggle( null);
+
+				handleOwnerToggle( null);
+
+				handleClearChg();
+				
+				if (Multitouch.supportedGestures == null || Multitouch.supportedGestures.length == 0 || Multitouch.supportedGestures.indexOf(TransformGestureEvent.GESTURE_ZOOM) == -1) {
+					state.text += "MT not supported";
+				} else {
+					addEventListener(TransformGestureEvent.GESTURE_ZOOM, handleZoom);
+				}
+				
+				if ( ! Geolocation.isSupported) {
+					state.text = "GeoLocation is not supported.";
+/*					
+					simTimer = new Timer( 500);
+					simTimer.addEventListener(TimerEvent.TIMER, handleSimUpdate);
+					simTimer.start();
+*/
+					gpsLayer.visible = false;
+					_gpsOnline = false;
+				}
+
+				online = true;
+				
+				var it:SignsOwner = new SignsOwner();
+
+				bSize = Math.max( Capabilities.screenDPI / 3, 40);
+				
+				bPreCache.width = bPreCache.height = bZooomOut.width = bZooomOut.height = bZooomIn.width = bZooomIn.height = bSize;
+				vgPrecache.left = bSize + 30;
+			}
+			
+			protected function onActivateApp(event:Event):void {
+				debug( "activate.");
+				
+//				online = true;
+			}
+			
+			protected function onDeactivateApp(event:Event):void {
+				debug( "deactivate.");
+			
+//				online = false;
+			}
+			
+			protected function trackMap( evt:Event):void {
+				debug( "chg.");
+				if ( baseMapLayer != null) {
+//					if ( !_preloading) preLevel.value = baseMapLayer.layer;
+					viewLevel.value = baseMapLayer.layer;
+					lViewLevel.text = ''+viewLevel.value;
+				}
+			}
+			
+			protected function trackSlider( evt:Event):void {
+				debug( "chg. #"+maxLevel.value);
+				lMaxLevel.text = ""+maxLevel.value;
+				/*
+				if ( baseMapLayer != null) {
+					preLevel.value = preloadLayer.layer = maxLevel.value;
+				}
+				callLater( triggerPreloading);
+				*/
+			}
+
+			protected function handlePrecacheControls( evt:Event):void {
+				preloadLayerRad.layer = preloadLayerMtb.layer = preloadLayerWan.layer = preloadLayerLoi.layer = preloadLayer.layer = baseMapLayer.layer;
+				preLevel.value = preloadLayer.layer;
+				lPreLevel.text = ''+preLevel.value;
+				
+				preloadLayerRad.visible = preloadLayerMtb.visible = preloadLayerWan.visible = preloadLayerLoi.visible = preloadLayer.visible = vgPrecache.visible = cbPrecache.selected;
+				
+				cbOptions.closeDropDown();
+			}
+			
+			protected function preCache( evt:Event):void {
+				debug( "precache ["+baseMapLayer.layer+"/"+preloadMax+"]");
+				
+				preloadMin = baseMapLayer.layer;
+				if ( preloadMin >= maxLevel.value) return;
+				
+				preloadLayerRad.layer = preloadLayerMtb.layer = preloadLayerWan.layer = preloadLayerLoi.layer = preloadLayer.layer = preloadMin;
+				preLevel.value = preloadLayer.layer;
+				lPreLevel.text = ''+preLevel.value;
+				
+				preloading = true;
+				callLater( triggerPreloading);
+				bPreCache.enabled = false;
+			}
+
+			protected function handlePreProgress( evt:ProgressEvent):void {
+//				debug( "preProgress: "+evt.bytesLoaded+" / "+evt.bytesTotal);
+				
+				pbPreLoad.visible = ( evt.bytesLoaded != evt.bytesTotal);
+				preProgress.setProgress( evt.bytesLoaded, evt.bytesTotal);
+			}			
+			
+			protected function preloadComplete( evt:Event=null):void {
+				debug( "preload complete ["+preloading+"/"+preloadLayer.layer+"]");
+
+				if ( preloading && preloadLayer.layer < maxLevel.value) {
+					preLevel.value++;
+					lPreLevel.text = ''+preLevel.value;
+
+					callLater( triggerPreloading);
+				} else {
+					pbPreLoad.visible = false;
+					bPreCache.enabled = true;
+					
+					preloading = false;
+					
+					handlePrecacheControls( null);
+				}
+			}
+			
+			protected function triggerPreloading():void {
+				preloadLayerRad.layer = preloadLayerMtb.layer = preloadLayerWan.layer = preloadLayerLoi.layer = preloadLayer.layer = preLevel.value;
+				tl.updateView();
+				
+				callLater( monitorPreloading);
+			}
+			
+			protected function monitorPreloading():void {
+				if ( preloadQueue.isEmpty()) {
+					callLater( preloadComplete);
+				}
+			}
+			
+			protected function set preloading( b:Boolean):void {
+				_preloading = b;
+				
+				preLevel.value = preloadLayer.layer;
+				lPreLevel.text = ''+preLevel.value;
+//				baseMapLayer.alpha = b ? 0.2 : 1;
+				
+				if ( b) {
+				} else {
+					preloadLayerRad.layer = preloadLayerMtb.layer = preloadLayerWan.layer = preloadLayerLoi.layer = preloadLayer.layer = preloadMin;
+				}
+			}
+			
+			protected function get preloading():Boolean {
+				return _preloading;
+			}
+			
+			// ---------------------------------------------------------------------------------------------
+			
+			public function set dataProvider( ac:ArrayCollection):void {
+				_dataProvider = ac;
+				symbolLayer.dataProvider = ac;
+				if ( _dataProvider.length > 0) adaptView();
+			}
+			
+			public function get dataProvider():ArrayCollection {
+				return _dataProvider;
+			}
+			
+			public function adaptView():void {
+				var sb:Bounds = tl.viewport;
+				var chg:Boolean = false;
+				
+				if ( cbCenterData.selected && _dataProvider.length > 0) {
+					sb.mbrAddBounds( symbolLayer.bounds);
+					chg = true;
+				}
+					
+				if ( cbCenterPos.selected) {
+					sb.mbrAddCoord( geoPos.longitude, geoPos.latitude);	
+					chg = true;
+				}
+					
+				debug( "view ["+chg+"] : "+sb);
+				if ( chg) {
+					tl.viewport = sb.scale( 1.5);
+					tl.updateView();
+				}				
+			}
+
+			// ---------------------------------------------------------------------------------------------
+			
+			public function get gpsOnline():Boolean {
+				return _gpsOnline;
+			}
+			
+			public function set online( st:Boolean):void {
+				debug( "online ["+st+"]");
+				
+				gpsOn = st;
+				accelOn = st;
+			}
+			
+			public function get geoLocation():GpsPos {
+				if ( !_gpsOnline) {
+					var view:Bounds = tl.viewport;
+					geoPos.longitude = view.centerx;
+					geoPos.latitude = view.centery;
+					
+					geoPos.horizontalAccuracy = -1;
+				}
+				
+				return geoPos;
+			}
+			
+			public function set view( v:Bounds):void {
+				_viewPort = v;
+				if ( tl != null) {
+					tl.viewport = v;
+					tl.updateView();
+				}
+			}
+			
+			public function get view():Bounds {
+				return tl.viewport;
+			}
+			
+			protected function set accelOn( st:Boolean):void {
+				debug( "accel ["+st+"/"+Accelerometer.isSupported+"]");
+				if ( false && st) {
+					if ( Accelerometer.isSupported && accelerometer == null) accelerometer = new Accelerometer();
+					if ( accelerometer != null) accelerometer.addEventListener(AccelerometerEvent.UPDATE, onAccelUpdate);
+				} else {
+					if ( accelerometer != null) accelerometer.removeEventListener(AccelerometerEvent.UPDATE, onAccelUpdate);					
+				}
+			}
+			
+			protected function set gpsOn( st:Boolean):void {
+				debug( "gps ["+st+"/"+Geolocation.isSupported+"]");
+				if ( Geolocation.isSupported) {
+					if ( st) {
+						if ( g == null) g = new Geolocation();
+						
+						if (g.muted) state.text = "Access to GPS has been denied";
+						else state.text = "Locating...";
+						
+						g.addEventListener(GeolocationEvent.UPDATE, onGpsUpdate);
+					} else {
+						if ( g != null) g.removeEventListener(GeolocationEvent.UPDATE, onGpsUpdate);
+					}
+				}				
+			}
+		
+			protected function onAccelUpdate(event:AccelerometerEvent):void {
+				
+				var phi:Number;
+				
+				if ( event.accelerationZ > 0.5) {
+					// horiz
+					//debug( "horizontal");
+				} else {
+					// vert
+					//debug( "vertical");
+				}
+				/*
+				debug( "acc [ X = " + event.accelerationX +
+				" Y = " + event.accelerationY +
+				" Z = " + event.accelerationZ +
+				" @ " + event.timestamp);
+				*/
+			}
+							
+			public function set heading( n:Number):void {
+				
+				geoPos.heading = n;
+				
+				updateCurrent();
+			}
+			
+			protected function handleClose( evt:Event):void {
+				debug( "exit");
+				dispatchEvent( new Event( Event.CLOSE));
+			}
+			
+			protected function handleClearCache( rvt:Event):void {
+				debug( "clear cache.");
+				
+				loadQueue.clearCache();
+				cbOptions.closeDropDown();
+			}
+			
+			protected function handleZoom(event:TransformGestureEvent):void {
+				
+				var sc:Number = event.scaleX;	//Math.sqrt( event.scaleX * event.scaleX + event.scaleY * event.scaleY);
+				
+				switch ( event.phase) {
+					case GesturePhase.BEGIN:
+						gestureScale = sc;
+						break;
+					case GesturePhase.UPDATE:
+						gestureScale *= sc;
+						break;
+					case GesturePhase.END:
+						gestureScale = 1 / gestureScale;
+						
+						var view:Bounds = tl.viewport;
+						view = view.scale( gestureScale);
+						
+						tl.viewport = view;
+						debug( "pinch: "+gestureScale+" : "+view);
+						break;
+				}
+				//				debug( "zoom ["+event.phase+"] ["+gestureScale+"] ["+sc+"]");
+			}
+			
+			protected function handleSimUpdate( evt:TimerEvent):void {
+				geoPos.heading = ( geoPos.heading + 5) % 360;
+				
+				//				geoPos.longitude = 10.8564448 + Math.random();
+				//				geoPos.latitude = 48.0483389 + Math.random();
+				
+				updateCurrent();
+			}
+			
+			protected function onGpsUpdate(event:GeolocationEvent):void {
+				if ( geoPos == null) return;
+				
+				geoPos.data = event;
+				_gpsOnline = true;
+				updateCurrent();
+			}
+			
+			protected function updateCurrent():void {
+				dataproviderPosition.itemUpdated( geoPos);
+				
+				state.text = geoPos.toString();
+				
+				var hotspot:Bounds = tl.viewport.clone();
+				hotspot = hotspot.scale( 0.5);
+				
+//				debug( "updatePos: "+geoPos.heading+" : "+cbCenterData.selected+"/"+cbCenterPos.selected+" : "+hotspot.center+" / "+hotspot);
+				
+				if ( firstPos || cbCenterPos.selected && ! hotspot.isWithinCoord( geoPos.longitude, geoPos.latitude)) {
+					
+					var nv:Bounds = tl.viewport.clone();
+					
+					if ( cbCenterData.selected) {
+						var sb:Bounds = symbolLayer.bounds;
+						sb = sb.scale( 1.5);
+						
+						nv.mbrAddBounds( sb);
+					}
+/*
+					//debug( "update1: "+nv);
+					nv.mbrAddCoord( geoPos.longitude, geoPos.latitude);
+					//debug( "update2: "+nv);
+					tl.viewport = nv.scale( 1.2);
+					*/
+					nv.centerx = geoPos.longitude;
+					nv.centery = geoPos.latitude;
+					
+					debug( "rePos: "+nv.center+" / "+nv);
+					tl.viewport = nv;
+					
+					firstPos = false;
+				}
+			}
+			
+			public function set centerPos( b:Boolean):void {
+				cbCenterPos.selected = b;
+				updateCurrent();
+			}
+			
+			protected function handlePosCenter( evt:Event):void {
+				updateCurrent();
+				cbOptions.closeDropDown();
+			}
+			
+			public function set centerData( b:Boolean):void {
+				cbCenterData.selected = b;
+				updateCurrent();
+			}
+			
+			protected function handleDataCenter( evt:Event):void {
+				updateCurrent();
+				cbOptions.closeDropDown();
+			}
+			
+			protected function handleSync( evt:Event):void {
+
+				var te:TopEvent = new TopEvent( TopEvent.SYNC_DATA);
+				te.parent = bSync;
+				
+				dispatchEvent( te);
+				
+				cbOptions.closeDropDown();
+			}
+			
+			protected function handleWndToggle( evt:Event):void {
+				wndOvlLayer.visible = cbMapWnd.selected;
+				cbOptions.closeDropDown();
+			}
+			
+			protected function handleRadToggle( evt:Event):void {
+				radOvlLayer.visible = cbMapRad.selected;
+				cbOptions.closeDropDown();
+			}
+			
+			protected function handleMtbToggle( evt:Event):void {
+				mtbOvlLayer.visible = cbMapRad.selected;
+				cbOptions.closeDropDown();
+			}
+			
+			protected function handleLoiToggle( evt:Event):void {
+				loiOvlLayer.visible = cbMapLoi.selected;
+				cbOptions.closeDropDown();
+			}
+			
+			protected function handleClearChg( evt:Event=null):void {
+				bClWan.enabled = bClRad.enabled = bClMtb.enabled = bClLoi.enabled = cbEnClear.selected;
+			}
+			
+			protected function handleClearLayer( layer:AdaptiveLayer):void {
+				loadQueue.clearCacheLayer( layer.mapInfo);
+				debug( "clear cache for ["+layer.mapInfo.name+"]");
+			}
+			
+			protected function handleOwnerToggle( evt:Event):void {
+				ownerLayer.visible = cbOwnerOvl.selected;
+				
+				if ( ownerLayer.visible) {
+					if ( it == null) it = new SignsOwner();
+					
+					dataproviderOwner.removeAll();
+
+					var sp:RetrievalParameters = new RetrievalParameters();
+					
+					var resp:Responder = null;
+					if ( Model.asyncMode) resp = new Responder( ownersDone, it.defaultSqlErrorResponder);
+					
+					var ps:ArrayCollection = it.list( sp, resp);
+					
+					if ( ps != null) {
+						dataproviderOwner.addAll( ps);
+					}
+				}
+				
+				cbOptions.closeDropDown();
+			}
+						
+			protected function ownersDone( sqe:SQLResult):void {
+				var ul:ArrayCollection = it.addResult( sqe, dataproviderOwner);
+			}
+			
+			public function get selectedItems():Array {
+				return symbolLayer.selectedItems;
+			}
+			
+			public function set selectedItems( sel:Array):void {
+				symbolLayer.selectedItems = sel;
+			}
+			
+			public function select( obj:Object):void {
+				var sm:Symbol = symbolLayer.getSymbol( obj);
+				symbolLayer.select( sm, false);
+			}
+			
+			protected function handleClick( evt:IndexChangeEvent):void {
+				debug( "click: "+evt);
+				
+				dispatchEvent( new IndexChangeEvent( IndexChangeEvent.CHANGE));
+/*				
+				if ( poiCallout == null) {
+					poiCallout = new DetailCallout();
+					
+					addEventListener( Event.CANCEL, handleCancel);
+					addEventListener( Event.CLOSE, handleSave);
+				}
+				poiCallout.data = sym.selectedItems[0];
+				
+				poiCallout.open( this, false);
+*/
+			}
+			
+			protected function handleCancel( evt:Event):void {
+				debug( "cancel.");
+			}
+			
+			protected function handleSave( evt:Event):void {
+				debug( "save.");
+			}
+/*			
+			protected function genLayer( mi:MapInfo):MapLayer {
+				// 				debug( "adding layer: "+mi.name);
+				var temp:AdaptiveLayer = new AdaptiveLayer();
+				
+				temp.loadQueue = loadQueue;
+//				temp.contentCache = mapCache;
+				
+				temp.mapInfo = mi;
+				temp.priority = 1;
+				
+				return temp;
+			}
+			
+			protected function addLayer( mi:MapInfo):AdaptiveLayer {
+				// 				debug( "adding layer: "+mi.name);
+				var temp:AdaptiveLayer = new AdaptiveLayer();
+
+				temp.loadQueue = loadQueue;
+				//temp.contentCache = mapCache;
+
+				temp.mapInfo = mi;
+				temp.priority = 1;
+				tl.addChild( temp);
+				
+				tl.updateView();
+				
+				return temp;
+			}
+*/			
+			protected function loadComplete( evt:Event=null):void {
+				debug( "complete.");				
+			}
+			
+			protected function handleProgress( evt:ProgressEvent):void {
+				//				debug( "progress: "+evt.bytesLoaded+" / "+evt.bytesTotal);
+				
+				pbLoad.visible = ( evt.bytesLoaded != evt.bytesTotal);
+			}			
+			
+			protected function handleGeometries( evt:ResultEvent, token:Object=null):void {
+				
+				var res:Array = evt.result as Array;
+				
+				if ( res == null) debug( "no items yet.");
+				else {
+					debug( "get items #"+res.length);
+					
+					var its:ArrayCollection = new ArrayCollection( res);
+
+					ownerLayer.dataProvider = its;	//new ArrayCollection( res);
+				}
+			}
+
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			//===========================================================================================================
+
+			protected function filterLocationsOpen(event):void {
+				debug( "filter open");
+				var evt:TopEvent = new TopEvent( TopEvent.FILTER_OPEN, true);
+				
+				dispatchEvent( evt);
+			}
+			
+			protected function doZoomIn( evt:Event):void {
+				tl.zoomIn();
+			}
+			
+			protected function doZoomOut( evt:Event):void {
+				tl.zoomOut();
+			}
+			
+			protected function debug( txt:String):void {
+				trace( this.className+": "+txt);
+			}			
+		]]>
+	</fx:Script>
+	<!-- 			protected var radOvlLayer:AdaptiveLayer;
+	protected var mtbOvlLayer:AdaptiveLayer;
+	protected var wndOvlLayer:AdaptiveLayer;
+	protected var loiOvlLayer:AdaptiveLayer;
+ -->
+	<s:actionContent>
+		<s:CalloutButton id="cbOptions" label="Karte" verticalPosition="after">
+			<s:calloutLayout>
+				<s:VerticalLayout gap="10" paddingTop="10" paddingLeft="10" paddingBottom="10" paddingRight="10"/>
+			</s:calloutLayout>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Label text="Kunden" width="100%"/>
+				<s:ToggleSwitch id="cbOwnerOvl" label="Kunden" selected="false" change="handleOwnerToggle( event);"/>
+			</s:HGroup>
+			<s:Spacer width="100%" height="5"/>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Button id="bClWan" label="c!" emphasized="true" click="handleClearLayer( wndOvlLayer);"/>
+				<s:Label text="Wandern" width="100%"/>
+				<s:ToggleSwitch id="cbMapWnd" label="Wandern" selected="false" change="handleWndToggle( event);"/>
+			</s:HGroup>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Button id="bClMtb" label="c!" emphasized="true" click="handleClearLayer( mtbOvlLayer);"/>
+				<s:Label text="MTB" width="100%"/>
+				<s:ToggleSwitch id="cbMapMtb" label="MTB" selected="false" change="handleMtbToggle( event);"/>
+			</s:HGroup>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Button id="bClRad" label="c!" emphasized="true" click="handleClearLayer( radOvlLayer);"/>
+				<s:Label text="Rad" width="100%"/>
+				<s:ToggleSwitch id="cbMapRad" label="Rad" selected="false" change="handleRadToggle( event);"/>
+			</s:HGroup>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Button id="bClLoi" label="c!" emphasized="true" click="handleClearLayer( loiOvlLayer);"/>
+				<s:Label text="Loipen" width="100%"/>
+				<s:ToggleSwitch id="cbMapLoi" label="Loipen" selected="false" change="handleLoiToggle( event);"/>
+			</s:HGroup>
+			<s:Spacer width="100%" height="5"/>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Label text="center Pos" width="100%"/>
+				<s:ToggleSwitch id="cbCenterPos" label="center Pos" selected="false" change="handlePosCenter( event);"/>
+			</s:HGroup>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Label text="center Data" width="100%"/>
+				<s:ToggleSwitch id="cbCenterData" label="center Data" selected="false" change="handleDataCenter( event);"/>
+			</s:HGroup>
+			<s:Spacer width="100%" height="5"/>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Label text="Precache" width="100%"/>
+				<s:ToggleSwitch id="cbPrecache" label="precache Data" selected="false" change="handlePrecacheControls( event)"/>
+			</s:HGroup>
+			<s:HGroup verticalAlign="middle" horizontalAlign="left" width="100%">
+				<s:Label text="Clear Cache" width="100%"/>
+				<s:ToggleSwitch id="cbEnClear" label="enClear" selected="false" change="handleClearChg( event);"/>
+			</s:HGroup>
+		</s:CalloutButton>
+		<s:Spacer width="15" height="100%"/>
+		<s:Button id="bSync" label="Sync" click="handleSync( event);" emphasized="true"/>
+		<s:Button id="cbFilter" label="Filter" click="filterLocationsOpen(event)"/>
+	</s:actionContent>
+	<s:navigationContent>
+		<s:Button label="Exit" width="100%" click="handleClose( event);" emphasized="true"/>
+	</s:navigationContent>
+	<ns1:Lighttable id="tl" width="100%" height="100%" snapToLevel="true" />
+	<s:VGroup left="10" top="10" bottom="10" gap="15" horizontalAlign="center">
+		<s:Button id="bZooomIn" right="5" top="5" width="{bSize}" height="{bSize}" label="+"
+				  alpha="0.7" buttonDown="doZoomIn( event);"/>
+		<s:BusyIndicator id="pbLoad" alpha="0.4"/>
+		<s:Spacer width="100%" height="100%"/>
+		<s:Button id="bZooomOut" right="5" top="85" width="{bSize}" height="{bSize}" label="-"
+				  alpha="0.7" buttonDown="doZoomOut( event);"/>
+	</s:VGroup>
+	<s:HGroup id="vgPrecache" visible="false" left="{bSize + 30}" right="10" top="10"
+			  horizontalAlign="center">
+		<s:BusyIndicator id="pbPreLoad" enabled="false" alpha="0.4"/>
+		<s:VGroup width="100%" height="100%" gap="1">
+			<components:ProgressBar id="preProgress" width="100%" />
+			<s:HGroup width="100%" alpha="0.7">
+				<s:Label width="25" fontSize="12" text="akt"/>
+				<s:HSlider id="viewLevel" width="100%" enabled="false"
+						   skinClass="spark.skins.spark.HSliderSkin"/>
+				<s:Label id="lViewLevel" width="20" fontSize="14"/>
+			</s:HGroup>
+			<s:HGroup width="100%" alpha="0.7">
+				<s:Label width="25" fontSize="12" text="wrk"/>
+				<s:HSlider id="preLevel" width="100%" enabled="false"
+						   skinClass="spark.skins.spark.HSliderSkin"/>							
+				<s:Label id="lPreLevel" width="20" fontSize="14"/>
+			</s:HGroup>
+			<s:HGroup width="100%" alpha="0.7">
+				<s:Label width="25" fontSize="12" text="max"/>
+				<s:HSlider id="maxLevel" alpha="0.7" width="100%" height="100%" change="trackSlider( event)"/>							
+				<s:Label id="lMaxLevel" width="20" fontSize="14"/>
+			</s:HGroup>
+		</s:VGroup>
+		<s:Button id="bPreCache" label="Go" alpha="0.7" click="preCache( event);"/>
+	</s:HGroup>
+	<s:HGroup left="80" bottom="0" contentBackgroundAlpha="0.6" contentBackgroundColor="#ffffff">
+		<s:Label id="state" right="0" bottom="0" styleName="mapStatus" text="Label"/>
+	</s:HGroup>
+</s:View>

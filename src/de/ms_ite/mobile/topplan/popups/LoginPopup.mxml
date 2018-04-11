@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:SkinnablePopUpContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark"
+						   creationComplete="initUI(event)" close="handleClose( event);">
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import mx.events.FlexEvent;
+			
+			public function get username():String {
+				return uname.text;
+			}
+			
+			public function get password():String {
+				return pword.text;
+			}
+			
+			public function clearPassword():void {
+				pword.text = '';
+			}
+			
+			public function set message( m:String):void {
+				lMessage.text = ( m == null) ? '' : m;
+				lMessage.visible = ( m != null && m.length > 0);
+			}
+			
+			protected function handleClose( evt:Event):void {
+				clearPassword();
+				message = null;
+			}
+			
+			protected function initUI(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				tw.closeButton.visible = false;
+				
+				uname.setFocus();
+			}
+			
+			protected function unameEntered(event:FlexEvent):void
+			{
+				// TODO Auto-generated method stub
+				pword.setFocus()
+			}
+			
+		]]>
+	</fx:Script>
+	<s:TitleWindow id="tw" title="Login to ">
+		<s:layout>
+			<s:VerticalLayout paddingTop="8" paddingBottom="8" paddingLeft="8" paddingRight="8" gap="5"/>
+		</s:layout>
+		<s:Label text="Username:" styleName="inputLabel"/>
+		<s:TextInput id="uname" autoCorrect="false" softKeyboardType="default" tabEnabled="true"
+					 tabIndex="0" enter="pword.setFocus()"/>
+		<s:Label text="Password:" styleName="inputLabel"/>
+		<s:TextInput id="pword" autoCorrect="false" displayAsPassword="true" tabEnabled="true"
+					 tabIndex="1" enter="dispatchEvent( new TopEvent( TopEvent.LOGIN_USER))"/>
+		<s:Spacer width="100%" height="10"/>
+		<s:HGroup width="100%" verticalAlign="middle">
+			<s:Button label="Login" click="dispatchEvent( new TopEvent( TopEvent.LOGIN_USER))" tabIndex="2" tabEnabled="true"/>
+			<s:Spacer width="100%" height="100%"/>
+			<s:Label id="lMessage" visible="false" styleName="loginErrorMessage" text=""/>
+		</s:HGroup>
+	</s:TitleWindow>
+</s:SkinnablePopUpContainer>

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark"
+		   xmlns:ns="de.ms_ite.mobile.*" 
+		   width="100%"
+		   creationComplete="initUI(event);"
+		   contentBackgroundAppearance="none">
+	<!-- focusOut="handleError(event)" -->
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import models.SignsLocation;
+			
+			import mx.events.FlexEvent;
+			
+			import views.LocationEditView;
+			
+			protected var item:SignsLocation;
+			
+			protected var iEditor:LocationEditView;
+			
+			protected var canSave:Boolean = true;
+			
+			protected function initUI(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				
+				busy = false;
+				
+				iEditor = LocationEditView( viewNav.activeView);
+				
+				iEditor.addEventListener( TopEvent.LOCATION_ADD, handleAdd);
+				iEditor.addEventListener( TopEvent.LOCATION_SAVED, handleClose);
+				iEditor.addEventListener( TopEvent.LOCATION_SAVE_ERROR, handleError);
+				iEditor.addEventListener( Event.CANCEL, handleCancel);
+			}
+			
+			public function set data( dest:Object):void {
+				item = SignsLocation( dest);
+				if ( iEditor != null) iEditor.data = dest;
+				debug( "setD "+(dest != null));
+				canSave = true;
+			}
+			
+			public function get data():Object {
+				return item;
+			}
+			
+			protected function handleAdd(event:Event):void {
+				// TODO Auto-generated method stub
+				debug( "location added.");
+				
+				busy = false;
+				close( true, iEditor.data);
+				
+				dispatchEvent( new TopEvent( TopEvent.LOCATION_ADD));
+			}
+
+			protected function handleClose(event:Event):void {
+				// TODO Auto-generated method stub
+				trace( "location saved.");
+				
+				busy = false;
+				close( true, iEditor.data);
+				
+				dispatchEvent( new TopEvent( TopEvent.LOCATION_SAVED));
+			}
+			
+			protected function handleError(event:Event):void {
+				// TODO Auto-generated method stub
+				trace( "closed callout. ERROR!");
+
+				busy = false;
+				close( false);
+				
+				dispatchEvent( new TopEvent( TopEvent.LOCATION_SAVE_ERROR));
+			}
+			
+			protected function handleCancel( evt:Event):void {
+				busy = false;
+				close( false);
+			}
+			
+			protected function set busy( b:Boolean):void {
+				if ( bSave == null) return;
+				
+				bSave.includeInLayout = b;
+				bSave.visible = b;
+			}
+			
+			public function saveLocation( evt:Event):void {
+				
+				busy = true;
+				iEditor.doSave(evt);
+				canSave = false;
+			}			
+			
+			protected function deleteLocation( evt:Event):void {
+				
+				busy = true;
+				iEditor.doDelete(evt);
+				canSave = false;
+			}			
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+		]]>
+	</fx:Script>
+	<s:ViewNavigator title="Standort" id="viewNav" width="100%" height="100%" firstView="views.LocationEditView" firstViewData="{item}">
+		<s:navigationContent>
+			<s:Button label="X" click="close(false)"/>
+			<!-- s:Button id="bDelete" enabled="false" label="Delete" emphasized="true" click="deleteLocation( event);"/ -->
+		</s:navigationContent>
+		<s:actionContent>
+			<s:BusyIndicator id="bSave" visible="false" includeInLayout="false"/>
+			<s:Button id="done" label="Save" emphasized="true" enabled="{canSave}" click="saveLocation( event);"/>
+		</s:actionContent>
+	</s:ViewNavigator>
+</s:Callout>

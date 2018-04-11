@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				   xmlns:s="library://ns.adobe.com/flex/spark"
+				   width="100" height="10" backgroundAlpha="0.5" contentBackgroundAlpha="0.5"
+				   cornerRadius="3">
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			
+			protected var _progress:Number = 50;
+			
+			protected var _total:int = 100;
+			protected var _done:int = 0;
+			
+			public function set progress( val:Number):void {
+				_progress = val;
+				
+				_total = 100;
+				_done = _progress;
+				
+				updateBar();
+			}
+			
+			public function setProgress( current:Number, total:Number):void {
+				_total = total;
+				done = current;
+			}
+			
+			public function get progress():Number {
+				return _progress;
+			}
+			
+			public function set total( t:int):void {
+				_total = t;
+				
+				_progress = 100 * _done / _total;
+				
+				updateBar();
+			}
+			
+			public function set done( d:int):void {
+				_done = d;
+				
+				_progress = 100 * _done / (( _total != 0) ? _total : 100);
+				
+				updateBar();
+			}
+			
+			protected function updateBar():void {
+//				trace( "PERC: "+_progress);
+				
+				if ( rProgress != null) rProgress.percentWidth = _progress;
+			}
+		]]>
+	</fx:Script>
+	<s:Rect id="rProgress" left="0" width="0" height="100%">
+		<s:fill>
+			<s:SolidColor color="0x40ff80"/>
+		</s:fill>
+	</s:Rect>
+</s:BorderContainer>

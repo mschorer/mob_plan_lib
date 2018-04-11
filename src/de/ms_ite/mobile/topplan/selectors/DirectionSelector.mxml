@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  minWidth="120" creationComplete="initUI(event)" gap="0"
+		  verticalAlign="bottom">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import spark.components.supportClasses.ListBase;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.components.DropDownList;
+			import spark.components.SpinnerList;
+			import spark.components.SpinnerListContainer;
+			import spark.events.IndexChangeEvent;
+			
+			protected var _dir:int = 0;
+			protected var _vals:ArrayCollection;
+			
+			protected var _dirList:ListBase;
+			
+			protected function initUI( evt:FlexEvent):void {
+				
+				if ( _dir != 0) _dirList.selectedIndex = getIndexOfValue( _dir);
+			}
+			
+			override protected function createChildren():void {
+				
+				if ( AppSettings.isDesktop) {
+					var ddl:DropDownList = new DropDownList();
+					ddl.requireSelection = true;
+//					ddl.labelField = "@name";
+					ddl.percentWidth = 100;
+					ddl.addEventListener( Event.CHANGE, selectionChanged);
+					ddl.setStyle( 'interactionMode', 'mouse');
+					
+					addElement( ddl);
+					
+					_dirList = ddl;
+				} else {
+					var dlc:SpinnerListContainer = new SpinnerListContainer();
+					dlc.percentWidth = 100;
+					dlc.height = 140;
+					
+					addElement( dlc);
+					
+					var spl:SpinnerList = new SpinnerList();
+					spl.percentWidth = 100;
+					spl.addEventListener( Event.CHANGE, selectionChanged);
+					spl.wrapElements = false;
+					
+					dlc.addElement( spl);
+					
+					_dirList = spl;
+				}
+				_dirList.dataProvider = _vals = AppSettings.getDirections();
+				
+				super.createChildren();
+			}
+			
+			public function set value( dir:int):void {
+//				debug( "set dir ["+dir+":"+_dir+"]");
+				
+				if ( _dir == dir) return;
+				_dir = dir;
+				
+				if ( _dirList == null) return;
+				
+				var idx:int = getIndexOfValue( _dir);
+				
+				if ( idx < 0) {
+					debug( "  dir not found ["+dir+"]");
+					_dirList.selectedIndex = 0;					
+				} else {
+					_dirList.selectedIndex = idx;
+				}
+			}
+			
+			public function get value():int {
+				return _dir;	
+			}
+			
+			protected function getIndexOfValue( dir:int) {
+				for( var i:int = 0; i < _vals.length; i++) {
+					if ( _vals.getItemAt(i).data == dir) return i;
+				}
+				
+				return -1;
+			}
+			
+			protected function selectionChanged(event:IndexChangeEvent):void {
+				_dir = parseInt( _dirList.selectedItem.data);
+			}
+	
+			protected function debug( s:String):void {
+				//trace( this.className+": "+s);
+			}
+		]]>
+	</fx:Script>
+	<s:Label text="Richtung:" styleName="spinnerLabel"/>
+	<!-- s:SpinnerListContainer width="100%" height="140" visible.mobile="true" includeInLayout.mobile="true" visible="false" includeInLayout="false">
+		<s:SpinnerList id="slDirection" width="100%" height="100%" change="valChanged(event)"
+					   labelField="label" selectedIndex="0" wrapElements="false">
+		</s:SpinnerList>
+	</s:SpinnerListContainer>
+	<s:DropDownList id="slDirection2" interactionMode="mouse" width="100%" change="valChanged(event)" labelField="label" 
+					visible.desktop="true" includeInLayout.desktop="true" visible="false" includeInLayout="false"/ -->
+</s:VGroup>

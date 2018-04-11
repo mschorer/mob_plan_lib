@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+						xmlns:s="library://ns.adobe.com/flex/spark"
+						creationComplete="initUI( event)">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.TagWrapper;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.popups.IconPopup;
+			import de.ms_ite.mobile.topplan.popups.IconPopupSingle;
+			
+			import models.RetrievalParameters;
+			import models.SignsIcon;
+			import models.SignsIconMap;
+			import models.SignsItem;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.core.UIComponent;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+									
+			protected var _item:SignsItem;
+			
+			protected static var _itemModel:SignsItem;
+			protected static var _item_icons:ArrayCollection;
+			
+			protected var _filterType:int = -1;
+			protected var _linkageType:int = 0;
+			
+			protected var _iconModel:SignsIcon;
+			protected var _iconMapModel:SignsIconMap;			
+						
+			protected function initUI(event:FlexEvent):void {				
+				if ( _item != null) showIcons();
+			}
+			
+			public function get item():SignsItem {
+				return _item;
+			}
+			
+			public function set item( i:SignsItem):void {
+				_item = i;
+				if ( iLarge != null) showIcons();
+			}
+			
+			protected function showIcons():void {
+				if ( _iconMapModel == null) _iconMapModel = new SignsIconMap();
+				
+				var sp:RetrievalParameters = new RetrievalParameters( { cache_item_id:_item.cache_id});
+				
+				_item_icons = _iconMapModel.list( sp);
+				
+				debug( "mark: #"+_item_icons.length);
+				
+				for( var i:int = 0; i < _item_icons.length; i++) {
+					var it:SignsIconMap = _item_icons.getItemAt( i) as SignsIconMap;
+					
+					var ic:SignsIcon = SignsIcon( AppSettings.iconList.getItemAt( AppSettings.iconIndexById( it.cache_icon_id)));
+
+					debug( "icon: "+it.sort+" ["+ic.name+"] ["+ic.cache_preview_url+"]");
+
+					switch( it.sort) {
+						case 5:
+							iLarge.source = ic.cache_preview_url;
+							break;
+
+						case 0x10:
+							iA1.source = ic.cache_preview_url;
+							break;
+						case 0x12:
+							iA2.source = ic.cache_preview_url;
+							break;
+						case 0x14:
+							iA3.source = ic.cache_preview_url;
+							break;
+						case 0x16:
+							iA4.source = ic.cache_preview_url;
+							break;
+
+						case 0x20:
+							iB1.source = ic.cache_preview_url;
+							break;
+						case 0x22:
+							iB2.source = ic.cache_preview_url;
+							break;
+						
+						case 0x30:
+							iArrow.source = ic.cache_preview_url;
+							break;
+
+						default:
+							debug( "XXX: "+it.sort+" ["+ic.cache_preview_url+"]");
+					}
+				}
+			}
+
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}						
+		]]>
+	</fx:Script>
+	<s:HGroup width="100%">
+		<s:Image id="iLarge"/>
+		<s:Spacer width="5" height="100%"/>
+		<s:Image id="iA1"/>
+		<s:Image id="iA2"/>
+		<s:Image id="iA3"/>
+		<s:Image id="iA4"/>
+		<s:Spacer width="5" height="100%"/>
+		<s:Image id="iB1"/>
+		<s:Image id="iB2"/>
+		<s:Spacer width="5" height="100%"/>
+		<s:Image id="iArrow"/>
+	</s:HGroup>
+</s:VGroup>

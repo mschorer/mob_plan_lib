@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:SkinnablePopUpContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark"
+						   xmlns:ns="de.ms_ite.mobile.topplan.components.*"
+						   creationComplete="initUI(event)" close="handleClose( event);"
+						   width="90%" height="90%" xmlns:ns1="de.ms_ite.mobile.topplan.selectors.*">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.RetrievalParameters;
+			import models.SignsOwner;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+//			protected static var _owners:ArrayCollection;
+			
+			protected var ownerModel:SignsOwner;
+			
+			protected function initUI(event:FlexEvent):void {
+/*
+				if ( _owners == null) {
+					_owners = AppSettings.ownerList;
+					
+					_owners.filterFunction = filter;
+					
+					if ( lTags != null) lTags.dataProvider = _owners;
+					_owners.refresh();
+				}
+*/				
+				if ( ownerModel != null) ownerSel.itemOwner = ownerModel;
+			}
+			
+			public function preset( om:SignsOwner):void {
+				ownerModel = om;
+				ownerSel.itemOwner = ownerModel;
+			}
+			
+			public function set itemOwner( ow:SignsOwner):void {
+				ownerModel = ow;
+				
+				if ( ownerSel != null) ownerSel.itemOwner = ownerModel;
+			}
+			
+			public function get itemOwner():SignsOwner {
+				return ( ownerSel.itemOwner == null) ? null : ownerSel.itemOwner;
+			}
+			
+			protected function handleClose( evt:Event):void {
+				debug( "close");
+				close( true);
+			}
+/*			
+			protected function submitData(event:Event):void {
+				debug( "submit");
+				close( true);
+				callLater( sendComplete);
+			}
+			
+			protected function updateList( evt:Event):void {
+				_owners.refresh();
+			}
+			
+			protected function sendComplete():void {
+				dispatchEvent( new Event( Event.COMPLETE));
+			}
+			
+			protected function filter( obj:Object):Boolean {
+				if ( tiFilter == null || tiFilter.text == '' || tiFilter.text == '*') return true;
+				
+				var ow:SignsOwner = SignsOwner( obj);
+				
+				return ( ow.name.toLowerCase().indexOf( tiFilter.text.toLowerCase()) >= 0 || ow.ags.indexOf( tiFilter.text) >= 0);
+			}
+*/			
+			protected function debug( txt:String):void {
+				trace( this.className+": "+txt);
+			}
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	<s:TitleWindow id="tw" title="Select Owner ..." width="100%" height="100%" close="handleClose(event)">
+		<s:layout>
+			<s:VerticalLayout gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2"
+							  paddingTop="2"/>
+		</s:layout>
+		<ns1:ItemOwnerSelector id="ownerSel" complete="handleClose( event);"/>
+	</s:TitleWindow>
+</s:SkinnablePopUpContainer>

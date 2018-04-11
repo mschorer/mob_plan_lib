@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<flexLibProperties includeAllClasses="true" useMultiPlatformConfig="true" version="3">
+  <includeClasses>
+    <classEntry path="de.ms_ite.mobile.topplan.ILocationProvider"/>
+    <classEntry path="de.ms_ite.mobile.CompassProvider"/>
+    <classEntry path="de.ms_ite.maptech.cache.LoadQueuePreloading"/>
+    <classEntry path="de.ms_ite.maptech.cache.TileInfoPreloading"/>
+    <classEntry path="de.ms_ite.mobile.topplan.components.SyncStatus"/>
+    <classEntry path="de.ms_ite.mobile.topplan.filters.LocationFilterComponent"/>
+    <classEntry path="de.ms_ite.mobile.topplan.components.ImageFileSelector"/>
+    <classEntry path="de.ms_ite.mobile.topplan.components.ImageFileSelector2"/>
+    <classEntry path="models.RetrievalParameters"/>
+    <classEntry path="de.ms_ite.mobile.topplan.TagWrapper"/>
+    <classEntry path="de.ms_ite.mobile.CustomDPIProvider"/>
+    <classEntry path="de.ms_ite.mobile.topplan.callouts.ProjectSelectCallout"/>
+    <classEntry path="de.ms_ite.mobile.topplan.tools.IdLookup"/>
+    <classEntry path="de.ms_ite.mobile.topplan.Signs"/>
+    <classEntry path="de.ms_ite.mobile.topplan.IImagePreviewContainer"/>
+    <classEntry path="de.ms_ite.mobile.topplan.IContainerProvider"/>
+    <classEntry path="de.ms_ite.mobile.topplan.components.SparkViewStack"/>
+    <classEntry path="de.ms_ite.mobile.topplan.filters.LocationDataFilter"/>
+    <classEntry path="views.FilterTagView"/>
+    <classEntry path="views.FilterOwnerView"/>
+    <classEntry path="de.ms_ite.mobile.topplan.layouts.ViewStackLayout"/>
+    <classEntry path="de.ms_ite.mobile.topplan.filters.FilterOwnerComponent"/>
+    <classEntry path="de.ms_ite.mobile.topplan.selectors.ItemOwnerSelector"/>
+    <classEntry path="de.ms_ite.mobile.topplan.filters.FilterSpec"/>
+    <classEntry path="de.ms_ite.mobile.topplan.views.LocationView"/>
+    <classEntry path="de.ms_ite.mobile.topplan.editors.ItemEditor"/>
+    <classEntry path="de.ms_ite.mobile.topplan.editors.ItemEditorContainer"/>
+    <classEntry path="de.ms_ite.mobile.topplan.renderer.OwnerSelectRenderer"/>
+    <classEntry path="de.ms_ite.mobile.topplan.renderer.FilterTagRenderer2"/>
+    <classEntry path="de.ms_ite.mobile.topplan.selectors.ItemSerialSelect"/>
+    <classEntry path="de.ms_ite.mobile.topplan.sync.SyncQueueSimple"/>
+    <classEntry path="de.ms_ite.mobile.topplan.sync.SyncQueue"/>
+    <classEntry path="de.ms_ite.mobile.topplan.components.ItemStatus"/>
+  </includeClasses>
+  <includeResources>
+    <resourceEntry destPath="assets/topplan_57.png" sourcePath="assets/topplan_57.png"/>
+    <resourceEntry destPath="assets/topplan_32.png" sourcePath="assets/topplan_32.png"/>
+    <resourceEntry destPath="assets/index.jpg" sourcePath="assets/index.jpg"/>
+    <resourceEntry destPath="assets/camera3.png" sourcePath="assets/camera3.png"/>
+    <resourceEntry destPath="assets/settings_icon.png" sourcePath="assets/settings_icon.png"/>
+    <resourceEntry destPath="assets/camera.png" sourcePath="assets/camera.png"/>
+    <resourceEntry destPath="assets/traffic-lights-yellow-icon.png" sourcePath="assets/traffic-lights-yellow-icon.png"/>
+    <resourceEntry destPath="assets/topplan_114.png" sourcePath="assets/topplan_114.png"/>
+    <resourceEntry destPath="assets/traffic-lights-green-icon.png" sourcePath="assets/traffic-lights-green-icon.png"/>
+    <resourceEntry destPath="assets/topplan_splash.png" sourcePath="assets/topplan_splash.png"/>
+    <resourceEntry destPath="assets/images.jpg" sourcePath="assets/images.jpg"/>
+    <resourceEntry destPath="assets/topplan_36.png" sourcePath="assets/topplan_36.png"/>
+    <resourceEntry destPath="assets/topplan_48.png" sourcePath="assets/topplan_48.png"/>
+    <resourceEntry destPath="assets/www_alrightythen_de.png" sourcePath="assets/www_alrightythen_de.png"/>
+    <resourceEntry destPath="assets/button_error_256.jpg" sourcePath="assets/button_error_256.jpg"/>
+    <resourceEntry destPath="assets/icon_walking2.jpg" sourcePath="assets/icon_walking2.jpg"/>
+    <resourceEntry destPath="assets/topplan_72.png" sourcePath="assets/topplan_72.png"/>
+    <resourceEntry destPath="assets/topplan_128.png" sourcePath="assets/topplan_128.png"/>
+    <resourceEntry destPath="assets/topplan_16.png" sourcePath="assets/topplan_16.png"/>
+    <resourceEntry destPath="assets/icon_cycling.jpg" sourcePath="assets/icon_cycling.jpg"/>
+    <resourceEntry destPath="assets/traffic-lights-red-icon.png" sourcePath="assets/traffic-lights-red-icon.png"/>
+    <resourceEntry destPath="assets/button_ok_256.jpg" sourcePath="assets/button_ok_256.jpg"/>
+    <resourceEntry destPath="assets/camera2.png" sourcePath="assets/camera2.png"/>
+    <resourceEntry destPath="assets/icon_walking.gif" sourcePath="assets/icon_walking.gif"/>
+  </includeResources>
+  <namespaceManifests/>
+</flexLibProperties>

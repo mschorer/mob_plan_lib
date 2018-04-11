@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark" 
+		   creationComplete="initUI(event)"> 
+		   <!-- width="250" -->
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import flash.data.SQLResult;
+			
+			import models.Model;
+			import models.SignsProject;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.events.ListEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+			
+//			protected var _cache_id:int;
+			protected var pj:SignsProject;
+			protected var _currentProject:SignsProject;
+			
+			protected var _options:ArrayCollection = new ArrayCollection();
+			
+//			protected var _defChromeColor:int;
+			
+			protected function initUI(event:Event):void {
+				this.updatePopUpPosition();
+				findSelected();				
+			}
+			
+			protected function getProjects():void {
+				_options.removeAll();
+				_options.addAll( AppSettings.projectList);
+			}
+
+			public function get project():SignsProject {
+				return _currentProject;
+			}
+			
+			public function set project( val:SignsProject):void {
+				_currentProject = val;
+			}
+			
+			public function get projectName():String {
+				return ( _currentProject == null) ? null : _currentProject.name;
+			}
+			
+			public function get project_id():int {
+				return _currentProject.id;
+			}
+			
+			public function set project_id( val:int):void {
+				//				getOwner( val);
+				
+				//				lOwner.text = ownerModel.name;
+			}
+/*			
+			public function get cache_project_id():int {
+				return _cache_id;
+			}
+			
+			public function set cache_project_id( val:int):void {
+				_cache_id = val;
+				
+				if ( _options == null) getProjects();
+				
+				findSelected();
+			}
+*/			
+			protected function findSelected():void {
+				
+				if ( _options == null || _options.length == 0) getProjects();
+				
+				if ( _currentProject == null) return;
+				
+				for( var i:int = 0; i < _options.length; i++) {
+					var opt:SignsProject = _options.getItemAt( i) as SignsProject;
+					
+					if ( _currentProject.cache_id != 0 && opt.cache_id == _currentProject.cache_id) {
+						lProjects.selectedItem = opt;
+						_currentProject = opt;
+						AppSettings.currentProject = _currentProject;
+						break;
+					}
+				}
+				
+				debug( "project #"+i+" / "+_options.length);
+			}
+			
+			protected function updateSelection():void {
+				
+				_currentProject = SignsProject( lProjects.selectedItem);
+				AppSettings.currentProject = _currentProject;
+				
+				debug( "project #"+projectName);
+			}
+			
+			protected function handleChange( evt:IndexChangeEvent):void {
+				forceSelection();
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}						
+			
+			protected function handleClose(event:DropDownEvent):void {
+				
+				forceSelection();
+			}
+			
+			protected function handleAddClose(event:DropDownEvent):void {
+			}
+			
+			protected function doSave(event:MouseEvent):void {
+				
+				pj = new SignsProject( { name:tiName.text, /* description:taDesc.text, */ cache_modified:new Date()});
+				
+				AppSettings.prepareProjectList();
+				
+				var resp:Responder = null;
+				
+				debug( "saving ["+pj+"]");
+
+				if ( Model.asyncMode) {
+					var resp:Responder = new Responder( projectSavedAsync, pj.defaultSqlErrorResponder);
+					pj.save( resp);
+				} else {
+					pj.save();
+					projectSaveConnected();
+				}
+			}
+				
+			protected function projectSavedAsync( sqe:SQLResult):void {
+				var b:Boolean = pj.saveResult( sqe);
+				debug( "saved async.");
+				projectSaveConnected();
+			}
+			
+			protected function projectSaveConnected():void {
+
+				debug( "save done.");
+				_options.addItem( pj);
+				lProjects.selectedItem = pj;
+				
+				forceSelection();
+			}
+			
+			protected function forceSelection():void {
+				updateSelection();
+				close( true);
+			}
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<s:List id="lProjects" labelField="name" width="100%" height="100%" dataProvider="{_options}" change="handleChange( event)"/>
+	<s:BorderContainer id="locationView" width="100%" backgroundAlpha="0.6"
+					   backgroundColor="0xc0ffc0" borderWeight="1"
+					   cornerRadius="5" horizontalCenter="0" verticalCenter="0">
+		<s:layout>
+			<s:HorizontalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="5"
+								verticalAlign="middle"/>
+		</s:layout>
+		<s:TextInput id="tiName" width="250" tabIndex="1"/>
+		<!-- s:TextArea id="taDesc" width="100%" height="80" tabIndex="2"/ -->
+		<s:Button id="bSave" label="Neu" click="doSave(event)" tabIndex="2"/>			
+	</s:BorderContainer>
+</s:Callout>

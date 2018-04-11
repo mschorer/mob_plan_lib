@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:SkinnablePopUpContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark"
+						   xmlns:ns="de.ms_ite.mobile.topplan.components.*"
+						   creationComplete="initUI(event)" close="handleClose( event);"
+						   width="90%" height="90%">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.TagWrapper;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.RetrievalParameters;
+			import models.SignsAction;
+			import models.SignsIcon;
+			import models.SignsIconMap;
+			import models.SignsItem;
+			import models.SignsUser;
+			import models.StatusModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			private var FilterSettings:ArrayCollection = new ArrayCollection([
+				{label:"Alle", data:-1},
+				{label:"Richtungen", data:0x05},
+				{label:"Steigung/Gefälle", data:0x20},
+				{label:"Spezial", data:0x28}, 
+				{label:"Pfeilspitzen", data:0x40},
+				{label:"Rad", data:0x50},
+				{label:"Lokal", data:0x70},
+				{label:"Überregional", data:0x80},
+				{label:"Sport", data:0x90}
+			]);
+/*			
+			public static var ICON_FILTER_ALL:int		= -1;
+			public static var ICON_FILTER_DIRECTIONS:int= 0x05;
+			public static var ICON_FILTER_ASDESCEND:int	= 0x20;
+			public static var ICON_FILTER_SPECIAL:int	= 0x28;
+			public static var ICON_FILTER_ARROWTIPS:int	= 0x40;
+			public static var ICON_FILTER_BIKE:int		= 0x50;
+			public static var ICON_FILTER_WALK:int		= 0x60;
+			public static var ICON_FILTER_REGIO:int		= 0x70;
+			public static var ICON_FILTER_ROUTEN:int	= 0x80;
+			public static var ICON_FILTER_SPORT:int		= 0x90;
+*/		
+			protected static var _icons:ArrayCollection;
+			protected static var _iconMap:Dictionary;
+			
+			protected static var _itemModel:SignsItem;
+			protected static var _item_icons:ArrayCollection;
+			
+			protected var _filterType:int = -1;
+			protected var _linkageType:int = 0;
+			
+			protected var _iconModel:SignsIcon;
+			protected var _iconMapModel:SignsIconMap;			
+			
+			protected function initUI(event:FlexEvent):void {
+
+				if ( _icons == null) {
+					var ownr:SignsIcon = new SignsIcon();
+					
+					var tl:ArrayCollection = AppSettings.iconList;
+					
+					_icons = new ArrayCollection();
+					_iconMap = new Dictionary();
+					for ( var i:int = 0; i < tl.length; i++) {
+						var tm:SignsIcon = SignsIcon( tl.getItemAt( i));
+				
+						var tw:TagWrapper = new TagWrapper( tm);
+						
+						_icons.addItem( tw);
+						_iconMap[ tm.cache_id] = tw;
+					}
+				}										
+				
+				if ( lIcons != null) lIcons.dataProvider = _icons;
+				
+				bbIcons.selectedIndex = 0;
+				iconFilter = _filterType;
+				
+				_icons.filterFunction = filter;
+				_icons.refresh();
+
+				presetIcons( _itemModel);
+			}
+			
+			protected function commitIcons():void {
+				debug( "commit:");
+				
+				var chg:Boolean = false;
+				
+				var plus:Array = new Array();
+				var enable:Array = new Array();
+				var disable:Array = new Array();
+				var nochange:Array = new Array();
+				
+				for( var i:int = 0; i < _icons.length; i++) {
+					var tw:TagWrapper = TagWrapper( _icons.getItemAt( i));
+					
+					if ( tw.changed) {
+						if ( tw.mapItem == null) {
+							var tmi:SignsIconMap = new SignsIconMap();
+							
+							tmi.cache_item_id = _itemModel.cache_id;
+							if ( _itemModel.id >= 0) tmi.item_id = _itemModel.id;
+							
+							tmi.cache_icon_id = tw.item.cache_id;
+							if ( tw.item.id >= 0) tmi.icon_id = tw.item.id;
+
+							tmi.sort = _linkageType;
+							tmi.cache_modified = new Date();
+							
+							tmi.save();
+							
+							plus.push( tw.item.name);
+							debug( "  add icon ["+tw.item.name+"] "+tmi.toString());
+						} else {
+							if ( tw.selected) {
+								debug( "  mark enabled ["+tw.item.name+"]");
+								enable.push( tw.item.name);
+								tw.mapItem.deleted = false;
+							} else {
+								debug( "  mark deleted ["+tw.item.name+"]");
+								disable.push( tw.item.name);
+								tw.mapItem.deleted = true;
+							}
+							tw.mapItem.cache_modified = new Date();
+							
+							debug( "  save: "+tw.mapItem);
+							tw.mapItem.save();								
+						}
+						chg = true;
+					} else {
+						if ( tw.mapItem != null) {
+							nochange.push( tw.item.name);
+						}
+					}
+				}
+				
+				if ( chg) {
+					var msg:String = "";
+					if ( plus.length > 0) msg += "*[ "+plus.join( ", ")+"]\n";
+					if ( enable.length > 0) msg += "+[ "+enable.join( ", ")+"]\n";
+					if ( disable.length > 0) msg += "-[ "+disable.join( ", ")+"]\n";
+					if ( nochange.length > 0) msg += "=[ "+nochange.join( ", ")+"]\n";
+					
+					logIconChange( _itemModel, msg);
+				}
+			}
+			
+			protected function unmarkIcons():void {
+				debug( "unmark all.");
+				
+				if ( _icons == null) return;
+				
+				for( var i:int = 0; i < _icons.length; i++) {
+					var tw:TagWrapper = TagWrapper( _icons.getItemAt( i));
+					tw.mapItem = null;
+					_icons.itemUpdated( tw);
+				}
+			}
+			
+			protected function presetIcons( im:SignsItem):void {
+
+				unmarkIcons();
+				
+				if ( _itemModel == null) return;
+				if ( _iconMapModel == null) _iconMapModel = new SignsIconMap();
+				
+				var sp:RetrievalParameters = new RetrievalParameters( { cache_item_id:im.cache_id});
+				
+				_item_icons = _iconMapModel.list( sp);
+				
+				debug( "mark: #"+_item_icons.length);
+
+				if ( _iconMap == null) return;
+				
+				for( var i:int = 0; i < _item_icons.length; i++) {
+					var mapItem:SignsIconMap = SignsIconMap( _item_icons.getItemAt( i));
+					var ow2:TagWrapper = _iconMap[ mapItem.cache_icon_id];
+					
+					if ( ow2 != null) {
+						ow2.mapItem = mapItem;
+						_icons.itemUpdated( ow2);
+						
+						debug( "   add: "+ow2.toString());
+					}
+				}
+				
+				if ( lIcons != null) lIcons.selectedItems = null;
+			}
+
+			protected function getTypeUrl( mapItem:SignsIconMap):String {
+				
+				var ow2:TagWrapper = _iconMap[ mapItem.cache_icon_id];
+				
+				if ( ow2 != null) {
+					var sm:SignsIcon = ow2.item as SignsIcon;
+					
+					return sm.preview_url;
+				}
+				return null;
+			}
+/*			
+			public function preset( om:SignsItem):void {
+				if ( om != _itemModel) {
+					_itemModel = om;
+					presetIcons( om);
+				}
+			}
+*/			
+			public function set item( ow:SignsItem):void {
+				if ( ow != _itemModel) {
+					_itemModel = ow;
+					presetIcons( ow);
+				}
+			}
+			
+			public function set iconFilter( type:int):void {
+				_filterType = type;
+
+				if ( bbIcons == null) return;
+				
+				for ( var i:int = 0; i < FilterSettings.length; i++) {
+					var filt:Object = FilterSettings.getItemAt( i);
+					
+					if ( _filterType == parseInt( filt.data)) {
+						bbIcons.selectedIndex = i;
+						_icons.refresh();
+						
+						break;
+					}
+				}
+			}
+			
+			public function set linkType( type:int):void {
+				_linkageType = type;
+			}
+			
+			public function get itemIcon():SignsIcon {
+				return ( lIcons.selectedItem == null) ? null : SignsIcon( lIcons.selectedItem);
+			}
+			
+			protected function handleClose( evt:Event):void {
+				debug( "close");
+				close( true);
+			}
+			
+			protected function saveChanges(event:Event):void {
+				debug( "submit");
+				commitIcons();
+				close( true);
+				callLater( sendComplete);
+			}
+			
+			protected function updateList( evt:Event):void {
+				_icons.refresh();
+			}
+			
+			protected function sendComplete():void {
+				dispatchEvent( new Event( Event.COMPLETE));
+			}
+			
+			protected function handleTab( evt:Event):void {
+				_icons.refresh();
+			}
+			
+			protected function filter( obj:Object):Boolean {
+				
+				var fil:int = (bbIcons.selectedItem != null) ? ( bbIcons.selectedItem.data as int) : -1;
+				
+				if ( fil >= 0 && obj.type != fil) return false;
+				
+				if ( tiFilter == null || tiFilter.text == '' || tiFilter.text == '*') return true;
+				
+				var ow:TagWrapper = TagWrapper( obj);
+				
+				return ( ow.label.toLowerCase().indexOf( tiFilter.text.toLowerCase()) >= 0);
+			}
+			
+			protected function logIconChange( item:SignsItem, msg:String):void {
+				var action:SignsAction = new SignsAction( {	item_id:item.id, cache_item_id:item.cache_id, type:AppSettings.ACTION_EDIT, status:AppSettings.STATUS_NOP, name:'Change icons', description:msg});
+				logItemAction( action);
+			}
+			
+			//===========================================================================================================
+			
+			public function logItemAction( action:SignsAction):void {
+				
+				var tu:SignsUser = AppSettings.getUser();
+				action.user_id = tu.id;
+				action.cache_user_id = tu.cache_id;
+				
+				action.cache_project_id = AppSettings.currentProject.cache_id;
+				action.project_id = AppSettings.currentProject.id;
+				
+				debug( "save item action ["+action.item_id+"] ["+action.toString()+"]");
+				
+				if ( AppSettings.online) {
+					action.callService( 'save', actionSaved, faultHandler);
+				} else {
+					action.cache_modified = new Date();
+					action.save();
+					debug( "saved item action ["+action+"]");
+				}
+			}
+			
+			protected function actionSaved( evt:ResultEvent, token:Object=null):void {
+				
+				var res:Array = evt.result as Array;
+				var item:StatusModel = new StatusModel( res[0]);
+
+				debug( "saved item action remote ["+item+"]");
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+				
+				dispatchEvent( new TopEvent( TopEvent.ITEM_SAVE_ERROR));
+			}
+			
+			//===========================================================================================================
+
+			protected function debug( txt:String):void {
+				trace( this.className+": "+txt);
+			}
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	<s:TitleWindow id="tw" title="Set icons ..." width="100%" height="100%" close="handleClose(event)">
+		<s:layout>
+			<s:VerticalLayout gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2"
+							  paddingTop="2"/>
+		</s:layout>
+		<s:HGroup width="100%" verticalAlign="middle">
+			<s:Button id="bFilter" label="Filter" click="updateList( event)"/>
+			<s:TextInput id="tiFilter" width="100%" change="updateList( event)"/>
+			<s:Button id="bSave" label="Save" click="saveChanges( event)"/>
+		</s:HGroup>
+		<s:ButtonBar id="bbIcons" requireSelection="true" dataProvider="{FilterSettings}" change="handleTab( event)"/>
+		<s:BorderContainer width="100%" height="100%" backgroundColor="0xe0e0e0" borderColor="0"
+						   borderWeight="1" contentBackgroundColor="0xe0e0e0" cornerRadius="5" horizontalCenter="0"
+						   verticalCenter="0">
+			<s:layout>
+				<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+			</s:layout>
+			<s:List id="lIcons" width="100%" height="100%" itemRenderer="de.ms_ite.mobile.topplan.renderer.MapIconRenderer"
+					allowMultipleSelection="true" horizontalScrollPolicy="off">
+				<s:layout>
+					<s:TileLayout orientation="rows" columnWidth="100" requestedColumnCount="6" requestedRowCount="6"/>
+				</s:layout>
+			</s:List>
+		</s:BorderContainer>
+	</s:TitleWindow>
+</s:SkinnablePopUpContainer>

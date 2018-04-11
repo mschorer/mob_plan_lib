@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark"
+		   xmlns:ns="de.ms_ite.mobile.*"
+		   creationComplete="initUI(event);"
+		   contentBackgroundAppearance="none">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.SignsAction;
+			import models.SignsItem;
+			
+			import mx.events.FlexEvent;
+			
+			import views.ActionEditView;
+			
+			protected var _action:SignsAction;
+			
+			protected var iEditor:ActionEditView;
+			protected var canSave:Boolean = true;
+			
+			protected function initUI(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				
+				busy = false;
+
+				iEditor = ActionEditView( viewNav.activeView);
+				
+				iEditor.addEventListener( TopEvent.ITEM_ACTION, handleItemAdded);
+				iEditor.addEventListener( TopEvent.ITEM_ACTION_ERROR, handleError);
+			}
+			
+			public function set data( dest:Object):void {
+				_action = SignsAction( dest);
+				if ( iEditor != null) iEditor.data = dest;
+				debug( "setD "+(dest != null));
+				canSave = true;
+			}
+			
+			public function get data():Object {
+				return _action;
+			}
+
+			protected function handleItemAdded(event:Event):void {
+				debug( "  item added.");
+				
+				handleClose( null);
+				
+				dispatchEvent( new TopEvent( event.type));
+			}
+
+			protected function handleItemSaved(event:Event):void {
+				debug( "  item saved.");
+				
+				handleClose( null);
+				
+				dispatchEvent( new TopEvent( event.type));
+			}
+			
+			protected function handleClose(event:Event):void {
+				// TODO Auto-generated method stub
+				trace( "closed callout");
+				
+				busy = false;
+				close( true, iEditor.data);
+			}
+
+			protected function handleError(event:Event):void {
+				// TODO Auto-generated method stub
+				trace( "closed callout. ERROR!");
+
+				busy = false;
+				close( false);
+				
+				dispatchEvent( new TopEvent( TopEvent.ITEM_SAVE_ERROR));
+			}
+			
+			protected function set busy( b:Boolean):void {
+				bSave.includeInLayout = b;
+				bSave.visible = b;
+			}
+			
+			protected function saveItem( evt:Event):void {
+				
+				busy = true;
+				iEditor.doSave(evt);
+				canSave = false;
+			}			
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+		]]>
+	</fx:Script>
+	<s:ViewNavigator title="Status" id="viewNav" width="100%" height="100%" firstView="views.ActionEditView" firstViewData="{_action}">
+		<s:navigationContent>
+			<s:Button label="X" click="close(false)"/>
+		</s:navigationContent>
+		<s:actionContent>
+			<s:BusyIndicator id="bSave" visible="false" includeInLayout="false"/>
+			<s:Button id="done" label="OK" emphasized="true" enabled="{canSave}" click="saveItem( event);"/>
+		</s:actionContent>
+	</s:ViewNavigator>
+</s:Callout>

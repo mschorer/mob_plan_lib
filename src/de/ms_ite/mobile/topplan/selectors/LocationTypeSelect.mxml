@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  creationComplete="initUI(event)" gap="0">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import spark.components.SpinnerList;
+			import spark.collections.NumericDataProvider;
+			import spark.components.DropDownList;
+			import spark.components.SpinnerListContainer;
+			import spark.components.supportClasses.ListBase;
+			import spark.events.IndexChangeEvent;
+						
+			protected var _type:int = 0;
+			
+			protected var _sortList:ListBase;
+			
+			protected function initUI( evt:Event):void {
+//				debug( "initUI");				
+
+				if ( _type != 0) type = _type;
+			}
+			
+			override protected function createChildren():void {
+				
+				if ( AppSettings.isDesktop) {
+					var ddl:DropDownList = new DropDownList();
+					ddl.requireSelection = true;
+					ddl.percentWidth = 100;
+					ddl.addEventListener( Event.CHANGE, changeSelection);
+					ddl.setStyle( 'interactionMode', 'mouse');
+					
+					ddl.dataProvider = AppSettings.locationsTypes;
+					
+					addElement( ddl);
+					
+					_sortList = ddl;
+				} else {
+					var dlc:SpinnerListContainer = new SpinnerListContainer();
+					dlc.percentWidth = 100;
+					dlc.height = 140;
+					
+					addElement( dlc);
+					
+					var spl:SpinnerList = new SpinnerList();
+					spl.percentWidth = 100;
+					spl.addEventListener( Event.CHANGE, changeSelection);
+					spl.wrapElements = false;
+
+					spl.dataProvider = AppSettings.locationsTypes;
+					
+					dlc.addElement( spl);
+					
+					_sortList = spl;
+				}
+				
+				super.createChildren();
+			}
+			
+			public function set type( i:int):void {
+				_type = i;
+				
+//				debug( "sort ["+_sort+"]");
+				
+				for each( var t:Object in AppSettings.locationsTypes) {
+					if ( t.data == i || i < 0) {
+						_sortList.selectedItem = t;
+						
+						if ( i < 0) _type = t.data;
+						debug( "type changed ["+t.data+"]");
+						return;
+					}
+				}
+				debug( "type changed [?]");
+			}
+			
+			public function get type():int {
+				return _type;
+			}
+			
+			protected function changeSelection(event:IndexChangeEvent):void {
+				
+				_type = _sortList.selectedItem.data;
+				debug( "sort changed ["+_type+"]");
+			}
+
+			protected function debug( s:String):void {
+				//trace( this.className+": "+s);
+			}			
+			
+		]]>
+	</fx:Script>
+	<s:Label id="lName" width="100%" paddingTop="4" styleName="spinnerLabel" text="Sort:"/>
+	<!-- s:SpinnerListContainer width="100%" height="140"  visible="false" includeInLayout="false" visible.mobile="true" includeInLayout.mobile="true">
+		<s:SpinnerList id="idx" wrapElements="false" height="100%" width="100%" change="changeSelection(event)">
+			<s:NumericDataProvider minimum="0" maximum="9" />
+		</s:SpinnerList>
+	</s:SpinnerListContainer>
+	<s:DropDownList id="idx2" interactionMode="mouse" width="100%" change="changeSelection(event)" dataProvider="{idx.dataProvider}" visible="false" includeInLayout="false" visible.desktop="true" includeInLayout.desktop="true"/ -->
+</s:VGroup>

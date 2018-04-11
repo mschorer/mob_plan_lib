@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 xmlns:ns="de.ms_ite.mobile.topplan.components.*" 
+		 xmlns:ns1="de.ms_ite.mobile.topplan.selectors.*" 
+		 implements="de.ms_ite.mobile.topplan.filters.FilterSpec"
+		 backgroundAlpha="0.6" borderWeight="1"
+		 cornerRadius="5" horizontalCenter="0" verticalCenter="0"
+		 creationComplete="initUI(event)">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import models.SignsProject;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.events.ListEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+			
+			//			protected var _cache_id:int;
+			protected var _currentProject:SignsProject;
+			
+			protected var _options:ArrayCollection = AppSettings.projectList;	//new ArrayCollection();
+			
+			//			protected var _defChromeColor:int;
+			
+			protected function initUI(event:Event):void {
+				findSelected();				
+			}
+			
+			public function reset():void {
+				cbTo.selected = cbFrom.selected = false;
+				lProjects.selectedItem = null;
+				_currentProject = null;
+			}
+			
+			public function active():Boolean {
+				return cbFrom.selected || cbTo.selected || _currentProject != null;
+			}
+			
+			protected function getProjects():void {
+//				_options.removeAll();
+//				_options.addAll( AppSettings.projectList);
+//				_options = AppSettings.projectList;
+				lProjects.dataProvider = AppSettings.projectList;	//_options;
+			}
+			
+			public function get project():SignsProject {
+				return _currentProject;
+			}
+			
+			public function get projectName():String {
+				return ( _currentProject == null) ? null : _currentProject.name;
+			}
+			
+			public function get project_id():int {
+				return ( _currentProject == null) ? -1 : _currentProject.id;
+			}
+			
+			public function get from():Date {
+				return ( cbFrom.selected ? dFrom.selectedDate : null)
+			}
+			
+			public function get to():Date {
+				return ( cbTo.selected ? dTo.selectedDate : null)
+			}
+			
+			protected function findSelected():void {
+				
+				if ( _options == null || _options.length == 0) getProjects();
+				
+				if ( _currentProject == null) return;
+				
+				for( var i:int = 0; i < _options.length; i++) {
+					var opt:SignsProject = _options.getItemAt( i) as SignsProject;
+					
+					if ( _currentProject.cache_id != 0 && opt.cache_id == _currentProject.cache_id) {
+						lProjects.selectedItem = opt;
+						_currentProject = opt;
+						break;
+					}
+				}
+				
+				debug( "project #"+i+" / "+_options.length);
+				enChanged();
+			}
+			
+			protected function updateSelection( evt:IndexChangeEvent):void {
+				
+				_currentProject = SignsProject( lProjects.selectedItem);
+
+				debug( "project #"+projectName);
+				enChanged();
+			}
+			
+			protected function enChanged( event:Event=null):void {
+				dispatchEvent( new Event( Event.CHANGE, true));
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}						
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:HorizontalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<s:List id="lProjects" labelField="name" width="200" height="100%" dataProvider="{_options}" change="updateSelection( event)">
+		<s:layout>
+			<s:VerticalLayout gap="2" requestedRowCount="6"/>
+		</s:layout>
+		<s:itemRenderer>
+			<fx:Component>
+				<s:IconItemRenderer styleName="projectItem" labelField="name" width="100%"/>
+			</fx:Component>
+		</s:itemRenderer>
+	</s:List>
+	<s:Group width="100%" height="100%">
+		<s:layout>
+			<s:HorizontalLayout/>
+		</s:layout>
+		<s:Group>
+			<s:layout>
+				<s:VerticalLayout verticalAlign="top"/>
+			</s:layout>
+			<s:CheckBox id="cbFrom" label="bearbeitet ab" change="enChanged( event);"/>
+			<s:DateSpinner id="dFrom" displayMode="date" locale="de-DE"/> 
+		</s:Group>
+		<s:Group>
+			<s:layout>
+				<s:VerticalLayout verticalAlign="top"/>
+			</s:layout>
+			<s:CheckBox id="cbTo" label="bearbeitet bis" change="enChanged( event);"/>
+			<s:DateSpinner id="dTo" displayMode="date" locale="de-DE"/> 
+		</s:Group>
+	</s:Group>
+</s:BorderContainer>

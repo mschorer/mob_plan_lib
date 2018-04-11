@@ -1,0 +1,173 @@
+/* CSS file */
+@namespace s "library://ns.adobe.com/flex/spark";
+
+
+global
+{
+	content-background-color: #f0f0f0;
+}
+
+s|Image {
+	enableLoadingState: true;
+}
+
+s|ActionBar
+{
+/*	defaultButtonAppearance: beveled;	*/
+}
+
+.iconSelectLrg {
+	width: 110px;
+	height: 110px;
+}
+
+.iconSelectSml {
+	width: 55px;
+	height: 55px;
+}
+
+.detail {
+	fontSize: 16;
+	fontWeight: bold;
+}
+
+.detailValue{
+	fontSize: 16;
+}
+
+.msgStyle {
+	fontSize: 14;
+}
+
+.imageUrlInfo {
+	fontSize: 14;
+}
+
+.spinnerLabel {
+	fontSize: 14;
+}
+
+.inputLabel {
+	fontSize: 12;
+}
+
+.iconSelectorName {
+	fontSize: 10;
+	textAlign: center;
+}
+
+.iconSelectorCount {
+	fontSize: 10;
+	textAlign: center;
+}
+
+.ownerSelectItem {
+	fontSize: 11;
+}
+
+.ownerItem {
+	fontSize: 12;
+}
+
+.filterItem {
+	fontSize: 11;
+}
+
+.syncStatusLabel {
+	fontSize: 11;
+	color: #14b014;
+}
+
+.syncErrorsLabel {
+	fontSize: 11;
+	color: #ef2424;
+}
+
+.syncStatusAction {
+	fontSize: 10;
+}
+
+.loginErrorMessage {
+	fontColor: #EF2424;
+	fontSize: 20; 
+}
+
+.interfaceLabel {
+	fontSize: 11;
+}
+
+.historyDate {
+	fontSize: 10;
+}
+
+.historyTitle {
+	fontSize: 12;
+	fontWeight: bold;
+}
+
+.historyDescription {
+	fontSize: 11;
+}
+
+.historyUserLabel {
+	color: #000000;
+	fontSize: 11;
+}
+
+.historyStatus {
+	color: #FFFFFF;
+	fontSize: 11; 
+}
+
+.historyAction {
+	color: #FFFFFF;
+	fontSize: 11; 
+}
+
+.listItemOwner {
+	fontSize: 12;
+}
+
+.listItemType {
+	fontSize: 12;
+}
+
+.listItemDirection {
+	fontSize: 14;
+	fontWeight: bold;
+}
+
+.listItemName {
+	fontWeight: bold;
+}
+
+.listItemValue {
+	
+}
+
+.listItemDescription {
+	fontSize: 12;
+}
+
+.mapIconLabel {
+	fontSize: 11;
+	maxDisplayedLines: 1;
+	showTruncationTip: true;
+}
+
+.mapItemLabel {
+	fontSize: 11;
+}
+
+.locationItemName {
+	fontSize: 18;
+	textAlign: left;
+}
+
+.locationEditSpinner {
+	fontSize: 16;
+}
+
+.mapStatus {
+	fontSize: 16;
+}

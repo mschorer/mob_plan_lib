@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 xmlns:ns="de.ms_ite.mobile.topplan.components.*" 
+		 xmlns:ns1="de.ms_ite.mobile.topplan.selectors.*"
+		 implements="de.ms_ite.mobile.topplan.filters.FilterSpec">
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import models.SignsOwner;
+			
+			public function get ownerModel():SignsOwner {
+				return ( ownerSel != null) ? ownerSel.itemOwner : null;
+			}
+			
+			public function active():Boolean {
+				return ownerSel.itemOwner != null;
+			}
+			
+			public function reset():void {
+				ownerSel.itemOwner = null;
+			}
+			
+			protected function ownerSelected(event:Event):void {
+				event.stopImmediatePropagation();
+				
+				dispatchEvent( new Event( Event.CHANGE, true));
+			}
+		]]>
+	</fx:Script>
+	<s:Label text="Owner"/>
+	<ns1:ItemOwnerSelector id="ownerSel" complete="ownerSelected(event)"/>
+</s:Group>

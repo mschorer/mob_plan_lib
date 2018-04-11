@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark"
+		 implements="de.ms_ite.mobile.topplan.filters.FilterSpec">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import spark.events.TextOperationEvent;
+			
+			protected var lastText:String;
+			protected var defText:String = 'Name/Beschreibung';
+			
+			protected var lastTag:String;
+			protected var defTag:String = 'ID #';
+			
+			public function get filterName():String {
+				if ( !cbEnableName.selected) return null;
+				
+				return tiLocationName.text;
+			}
+			
+			public function get filterTag():String {
+				if ( !cbEnableTag.selected) return null;
+				
+				return tiLocationTag.text;
+			}
+			
+			public function active():Boolean {
+				return cbEnableName.selected || cbEnableTag.selected;
+			}
+			
+			public function reset():void {
+				cbEnableName.selected = cbEnableTag.selected = false;
+			}
+			
+			protected function searchChanged(event:TextOperationEvent):void {
+				if ( tiLocationName.text.length == 0) cbEnableName.selected = false;
+			}
+			
+			protected function enText(event:Event):void {
+				tiLocationName.enabled = cbEnableName.selected;
+				tiLocationName.text = (tiLocationName.enabled) ? lastText : defText;
+				
+				dispatchEvent( new Event( Event.CHANGE, true));
+			}
+			
+			protected function enTag(event:Event):void {
+				tiLocationTag.enabled = cbEnableTag.selected;
+				tiLocationTag.text = (tiLocationTag.enabled) ? lastTag : defTag;
+
+				dispatchEvent( new Event( Event.CHANGE, true));
+			}
+			
+		]]>
+	</fx:Script>
+	<s:Label text="Standorte"/>
+	<s:HGroup>
+		<s:CheckBox id="cbEnableName" change="enText(event)"/>
+		<s:TextInput id="tiLocationName" text="Name/Beschreibung" enabled="false"/><!-- change="searchChanged(event)"/ -->
+	</s:HGroup>
+	<s:HGroup width="100%">
+		<s:CheckBox id="cbEnableTag" change="enTag(event)"/>
+		<s:TextInput id="tiLocationTag" text="ID #" restrict="0-9\-" enabled="false"/>
+	</s:HGroup>
+</s:VGroup>
+

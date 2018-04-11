@@ -1,0 +1,666 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009"
+					   xmlns:s="library://ns.adobe.com/flex/spark" 
+					   xmlns:mx="library://ns.adobe.com/flex/mx"
+					   xmlns:ns="de.ms_ite.mobile.*"
+					   xmlns:ns1="de.ms_ite.maptech.containers.*"
+					   xmlns:ns2="de.ms_ite.mobile.topplan.ui.*"
+					   width="1000" height="700" implements="de.ms_ite.mobile.topplan.ILocationProvider"
+					   activate="onActivate( event)" deactivate="onDeactivate(event)"
+					   creationComplete="initUI();"
+					   resize="resizeHandler(event)"
+					   pageTitle="Signs"
+					   runtimeDPIProvider="de.ms_ite.mobile.CustomDPIProvider"
+					   splashScreenImage="@Embed('assets/sign-post1.png')"><!-- 					   removed="handleClose(event)" -->
+	<fx:Declarations>
+		<fx:XML id="updSetup" xmlns="">
+			<configuration xmlns="http://ns.adobe.com/air/framework/update/configuration/1.0">
+				<url>http://app.topplan.de/update/update.xml</url>
+				<delay>1</delay>
+			</configuration>
+		</fx:XML>
+	</fx:Declarations>
+	<s:states>
+		<s:State name="phone_portrait"/>
+		<s:State name="phone_landscape"/>
+		<s:State name="pad_portrait"/>
+		<s:State name="pad_landscape"/>
+	</s:states>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.maptech.cache.TileInfoPreloading;
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.IHistoryContainer;
+			import de.ms_ite.mobile.topplan.IImagePreviewContainer;
+			import de.ms_ite.mobile.topplan.callouts.SyncCallout;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.popups.FilterPopup;
+			import de.ms_ite.mobile.topplan.popups.LoginPopup;
+			
+			import models.GpsPos;
+			import models.Model;
+			import models.RetrievalParameters;
+			import models.SignsAction;
+			import models.SignsIcon;
+			import models.SignsItem;
+			import models.SignsLocation;
+			import models.SignsModel;
+			import models.SignsTag;
+			import models.SignsUser;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Image;
+			import mx.events.*;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.ArrayUtil;
+			
+			import spark.collections.Sort;
+			import spark.collections.SortField;
+			import spark.components.Callout;
+			import spark.components.SkinnableContainer;
+			import spark.components.ViewMenu;
+			import spark.components.ViewMenuItem;
+			import spark.events.IndexChangeEvent;
+			
+			import views.EditView;
+			import views.MapView;
+			import views.PoiListView;
+			import views.SyncView;
+			
+			protected var defSettings:String = '<prefs><window x="100" y="100" width="1000" height="700"/><history x="50" y="50" width="400" height="700"/></prefs>';
+			protected var firstRun:Boolean = false;
+			protected var _settings:XML;
+			protected var _version:String = "X";
+			
+			protected var user:SignsUser;
+			protected var location:SignsLocation;
+			//			protected var mbase:MapInfo, movl:MapInfo;
+			
+			//			protected var acProjects:ArrayCollection;
+			protected var acLocations:ArrayCollection;
+			
+			protected var syncCallout:SyncCallout;
+			
+			protected var _mapView:MapView;
+			protected var listView:PoiListView;
+			protected var editLocationView:EditView;
+			
+			protected var platformType:String;
+			protected var _mapMode:Boolean;
+			
+			protected var loginAlert:LoginPopup;
+			
+			protected var filterPopup:FilterPopup;
+
+
+/*
+			protected function preinitApp(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				debug( "preinit.");
+				
+				//				var m:Model = new Model();
+				//				m.loadRemote();
+				
+				AppSettings.online = false;
+				
+				AppSettings.appBaseUrl = "http://app.topplan.de/signsVia/";
+				
+				AppSettings.persistentStoragePath = "C:\\ProgramData\\signsVia";
+				//				AppSettings.databaseStoragePath = "C:\\Users\\markus\\work\\vianovis\\topplan\\debug";
+				
+				Model.serviceURL = AppSettings.appBaseUrl+"amf/gateway.php";
+				Model.serviceName = "Signs";
+				
+				Model.dbFile = "signs.db";
+				//				Model.dbFile = "aampssler_0.9.98_Linux2.6.36.3_signs.db";
+				//				Model.dbFile = "aampssler_0.9.98_Windows7_signs.db";
+				//				Model.dbFile = "aampssler_0.9.990_Linux2.6.35.7-N7000XXLB1-CL933381_signs.db";
+				
+				TileInfoPreloading.dbFile = "tileCache.db";
+				TileInfoPreloading.cacheRelPath = "cache";				
+			} 
+*/			
+			protected function resizeHandler(event:ResizeEvent):void {
+				
+				//				debug( "resize.");
+				/*				
+				if ( stage != null && platformType == null) {
+				platformType = ( stage.stageWidth > 1000 || stage.stageHeight > 1000) ? 'pad' : 'phone';
+				}
+				
+				currentState = ((platformType == null) ? 'pad' : platformType)+'_'+aspectRatio;
+				mapMode = mapMode;
+				*/
+			}
+			
+			public function set version( s:String):void {
+				_version = s;
+			}
+			
+			public function get version():String {
+				return _version;
+			}
+			
+			public function set settings( s:String):void {
+
+				if ( s == null || s.length == 0) {
+					s = defSettings;
+					firstRun = true;
+				}
+				
+				_settings = new XML( s);
+				debug( "settings: "+_settings);
+			}
+			
+			public function get settings():String {
+				return _settings.toString();
+			}
+			
+			protected function handleClose( evt:Event):void {
+				debug( "exit");
+				_mapView.online = false;
+				
+				dispatchEvent( new Event( Event.CLOSE));
+			}
+			
+			//-----------------------------------------------------------------------------------------
+			
+			protected function initUI():void {
+				
+				acLocations = new ArrayCollection();	// symData);
+				
+				/* Create the SortField object for the "data" field in the ArrayCollection object, and make sure we do a numeric sort. */
+				var dataSortField:SortField = new SortField();
+				dataSortField.name = "tag_major";
+				dataSortField.numeric = true;
+				
+				var dataSortField2:SortField = new SortField();
+				dataSortField2.name = "tag_minor";
+				dataSortField2.numeric = true;
+				
+				/* Create the Sort object and add the SortField object created earlier to the array of fields to sort on. */
+				var numericDataSort:Sort = new Sort();
+				numericDataSort.fields = [dataSortField,dataSortField2];
+				
+				acLocations.sort = numericDataSort;
+				
+				_mapView = views.MapView( vnMap.activeView);
+				_mapView.dataProvider = acLocations;
+				
+				_mapView.addEventListener( Event.CLOSE, handleClose);
+				_mapView.addEventListener( TopEvent.SYNC_DATA, handleSync);
+				_mapView.addEventListener( TopEvent.LOCATION_CHANGED, handleLocationChange);
+
+				_mapView.addEventListener( TopEvent.FILTER_OPEN, handleOpenFilter);
+//				_mapView.addEventListener( TopEvent.FILTER_APPLY, handleApplyFilter);
+				
+				listView = views.PoiListView( vnPOIs.activeView);
+				listView.dataProvider = acLocations;
+				vnPOIs.addEventListener( IndexChangeEvent.CHANGE, handleSelectPoi);
+				
+				editLocationView = views.EditView( vnDetail.activeView);
+				editLocationView.addEventListener( TopEvent.ITEM_ADD, handleNewItem);
+				editLocationView.addEventListener( TopEvent.ITEM_SAVED, handleSaveItem);
+				editLocationView.addEventListener( TopEvent.LOCATION_ADD, handleNewPoi);
+				editLocationView.addEventListener( TopEvent.LOCATION_SAVED, handleSavePoi);
+				
+				debug( "initUI.");
+				
+				views.MapView( vnMap.activeView).data = acLocations;
+				
+				callLater ( retrieveUsers);
+				//				retrieveItems();
+				
+				vnMap.activeView.addEventListener( IndexChangeEvent.CHANGE, handleMapSelectPoi);
+				
+				preventSleep = true;				
+				mapMode = true;
+				compassOn = true;
+				
+				enabled = false;
+			}
+			
+			public function get mapView():MapView {
+				return _mapView;
+			}
+			
+			protected function handleLocationChange( evt:TopEvent):void {
+				debug( "changed pos:"+evt.location);
+				
+				editLocationView.saveCurrentLocation( evt.location);
+			}
+			
+			protected function handleSync( evt:TopEvent):void {
+				debug( "sync: "+evt);
+				
+				doSync( false);
+			}
+			
+			protected function doSync( mand:Boolean=false):void {
+				debug( "sync.");
+				
+				if ( syncCallout == null) {
+					syncCallout = new SyncCallout();
+					syncCallout.verticalPosition = 'after';
+					
+					syncCallout.addEventListener( TopEvent.SYNC_DOWN_COMPLETE, downSyncDone);
+					syncCallout.addEventListener( TopEvent.FORCE_RESTART, handleClose);
+				}
+				
+				syncCallout.data = acLocations;
+				syncCallout.mandatory = mand;
+				
+				if ( syncCallout.isOpen) syncCallout.close( false);
+				else syncCallout.open( _mapView.bSync, false);
+			}
+			
+			protected function downSyncDone( evt:TopEvent):void {
+				debug( "down sync done.");
+				
+				if ( syncCallout.mandatory) {
+					syncCallout.close( true);
+					requireLogin();
+					syncCallout.mandatory = false;
+				} else {
+					applyLocationFilter();
+				}
+			}
+			
+			protected function onActivate(event:Event):void {
+				debug( "activate.");
+				
+				preventSleep = true;
+				
+				//				requireLogin();
+			}
+			
+			protected function onDeactivate(event:Event):void {
+				debug( "deactivate.");
+				
+				preventSleep = false;
+			}
+			
+			protected function set compassOn( st:Boolean):void {
+				debug( "compass ["+st+"]");
+			}
+			/*			
+			protected function onCompassUpdate(e:StatusEvent):void {
+			//				debug( "compass: "+e.level);
+			
+			var values:Array = e.level.split("&");
+			var azimuth:Number = Number(values[0]);
+			
+			mapView.heading = azimuth;
+			}
+			*/			
+			protected function set preventSleep( st:Boolean):void {
+				debug( "sleep ["+st+"]");
+			}
+			
+			public function get mapMode():Boolean {
+				return _mapMode;
+			}
+			
+			public function set mapMode( m:Boolean):void {
+				_mapMode = m;
+			}
+			
+			protected function handleButtons(event:KeyboardEvent):void {
+				
+				switch( event.keyCode) {
+					case Keyboard.MENU:
+						// Handle Home button.
+						debug( "MENU");
+						break;
+					
+					case Keyboard.BACK:
+						// Hanlde back button.
+						debug( "BACK");
+						break;
+				}
+			}
+			
+			//==============================================================================================
+			
+			protected function requireLogin():void {
+				enabled = false;
+				
+				if ( loginAlert == null) {
+					loginAlert = new LoginPopup();
+					
+					loginAlert.addEventListener( TopEvent.LOGIN_USER, verifyUserLogin);
+				}
+				
+				if ( !loginAlert.isOpen) loginAlert.open( this, true);
+				loginAlert.clearPassword();
+				
+				loginAlert.tw.title += name + " (V"+_version+")";
+				
+				PopUpManager.centerPopUp( loginAlert);
+				loginAlert.y = 70;
+			}
+			
+			protected function verifyUserLogin( evt:Event):void {
+				
+				user.username = loginAlert.username;
+				user.password = AppSettings.hashPassword( loginAlert.password);
+				
+				debug( "check login ["+user.username+"] ["+user.password+"]");
+				
+				if ( AppSettings.online) {
+					user.callService( 'authenticate', handleRemoteVerification, faultHandler);
+				} else {
+					var resp:Responder = null;
+					if ( Model.asyncMode) {
+						resp = new Responder( handleLocalVerification, user.defaultSqlErrorResponder);
+						user.load( resp);
+					} else {
+						if ( user.load() && user.password == AppSettings.hashPassword( loginAlert.password)) loginResult( user);
+						else loginResult( null);
+					}
+				}
+			}
+			
+			protected function handleLocalVerification( sqe:SQLResult):void {
+				if ( user.loadResult( sqe)) loginResult( user);
+				else loginResult( null);				
+			}
+			
+			protected function handleRemoteVerification( evt:ResultEvent, token:Object=null):void {
+				debug( "login: "+evt);
+				
+				var users:Array = evt.result as Array;
+				
+				if ( users.length == 1) loginResult( users[0]);
+				else loginResult( null);
+			}
+			
+			protected function loginResult( user:SignsUser):void {
+				
+				if ( user == null) {
+					loginAlert.message = "Login failed.";
+					loginAlert.clearPassword();
+				} else {
+					
+					AppSettings.setUser( user);
+					debug( "login succeeded for "+user);
+					
+					enabled = true;
+					
+					loginAlert.close();
+					
+					callLater( startApp);
+				}				
+			}
+			
+			//==============================================================================================
+			
+			protected function startApp():void {
+				
+				editLocationView.chooseProject();
+				
+				applyLocationFilter();
+			}
+			
+			//==============================================================================================
+			
+			private function faultHandler(fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				//			    CursorManager.removeBusyCursor();
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			protected function handleSelectPoi( evt:IndexChangeEvent):void {
+				getSigns( SignsLocation( views.PoiListView( vnPOIs.activeView).selectedItem));
+			}
+			/*			
+			protected function handleCalloutSelectPoi( evt:IndexChangeEvent):void {
+			var loc:TopLocation = TopLocation( bPois.selectedItem);
+			getSigns( loc);
+			}
+			*/			
+			protected function getSigns( loc:SignsLocation):void {
+				if ( editLocationView.data != loc) {
+					editLocationView.data = loc;
+					
+					debug( "list select: "+loc.location);
+					
+					_mapView.select( loc);
+				}
+				
+				//				locService.getOperation( 'getSchilder').send( obj.locid);
+			}
+			
+			protected function handleMapSelectPoi( evt:IndexChangeEvent):void {
+				var item:SignsLocation = SignsLocation( views.MapView( vnMap.activeView).selectedItems[0]);
+				
+				if ( item == null) return;
+				
+				debug( "sel: "+item.id);
+				
+				//				views.DetailView( vnDetail.activeView).data = obj;
+				views.PoiListView( vnPOIs.activeView).selectedItem = item;
+
+				var histCallout:IHistoryContainer = IContainerProvider( this.parentApplication).getHistoryContainer();
+				//				}
+				
+				if ( histCallout != null) {
+					histCallout.show( this);
+					histCallout.location = item;
+				}
+				
+				//				bPois.selectedItem = item;
+				mapMode = false;
+			}
+			/*			
+			protected function addLocation( evt:Event):void {
+			var loc:TopLocation = new TopLocation();
+			
+			loc.location = mapView.location;
+			
+			editLocationView.data = loc;
+			}
+			*/			
+			protected function handleNewPoi( evt:Event):void {
+				var newLoc:SignsLocation = SignsLocation( editLocationView.data);
+				//				mapView.addPOIs( new ArrayCollection( new Array( editLocationView.data)));
+				acLocations.addItem( newLoc);
+				listView.selectedItem = newLoc;
+				debug( "added POI ["+evt.type+"] "+newLoc.toString());
+			}
+			protected function handleSavePoi( evt:Event):void {
+				var updLoc:SignsLocation = SignsLocation( editLocationView.data);	//TopLocation( views.PoiView( vnPOIs.activeView).selectedItem);
+				acLocations.itemUpdated( updLoc);
+				listView.selectedItem = updLoc;
+				debug( "saved POI ["+evt.type+"] "+updLoc.toString());
+			}
+			
+			protected function handleNewItem( evt:Event):void {
+				debug( "added Item ["+evt.type+"]");
+				var updLoc:SignsLocation = SignsLocation( editLocationView.data);	//TopLocation( views.PoiView( vnPOIs.activeView).selectedItem);
+				acLocations.itemUpdated( updLoc);
+			}
+			protected function handleSaveItem( evt:Event):void {
+				debug( "saved Item ["+evt.type+"]");
+				var updLoc:SignsLocation = SignsLocation( editLocationView.data);	//TopLocation( views.PoiView( vnPOIs.activeView).selectedItem);
+				acLocations.itemUpdated( updLoc);
+			}
+			
+			public function get geoLocation():GpsPos {
+				return _mapView.geoLocation;
+			}
+			
+			//==============================================================================================
+			
+			protected function retrieveUsers():void {
+				
+				if ( user == null) user = new SignsUser();
+				
+				if ( AppSettings.online) {
+					user.callService( 'getUsers', saveUserList, faultHandler);
+				} else {
+					setUsers( user.list());
+				}
+			}
+			
+			protected function saveUserList( evt:ResultEvent, token:Object=null):void {
+				debug( "ulist: "+evt);
+				
+				setUsers( new ArrayCollection( evt.result as Array));
+			}
+			
+			protected function setUsers( users:ArrayCollection):void {
+				
+				if ( users == null || users.length == 0) {
+					debug( "found NO users. syncing first ...");
+					
+					doSync( true);
+				} else {
+					debug( "found #"+users.length+" users.");
+					
+					AppSettings.userMap = users;
+					
+					callLater( requireLogin);
+				}
+				/*				
+				for each( var usr:TopUser in users) {
+				usr.save();
+				}
+				*/
+			}
+			
+			//----------------------------------------------------------------------------------------------
+			
+			protected function handleOpenFilter( evt:TopEvent):void {
+				if ( filterPopup == null) {
+					filterPopup = new FilterPopup();
+					
+					filterPopup.percentWidth = 90;
+					filterPopup.percentHeight = 90;
+					
+					filterPopup.addEventListener( Event.COMPLETE, applyLocationFilter);
+				}
+				
+				if ( !filterPopup.isOpen) filterPopup.open( DisplayObjectContainer( this.parentApplication), true);
+
+				if ( location == null) {
+					location = new SignsLocation();
+					location.pageSizeLocal = 250;
+				}
+				
+				filterPopup.preset( location);				
+			}
+			
+			protected function applyLocationFilter( evt:Event=null):void {
+				var sp:RetrievalParameters;
+				
+				var lon:Number = _mapView.view.centerx;
+				var lat:Number = _mapView.view.centery;
+				
+				if ( location == null) {
+					location = new SignsLocation();
+					location.pageSizeLocal = 250;
+				}
+				
+				if ( filterPopup == null) {
+					var tables:Array;
+					var fields:Array = null;
+					var conds:Object = null;
+					
+					fields = [{'DISTINCT l.*':''}, {'status':'coalesce( a.status, -1)'}, {dist:'(l.cache_lon-'+lon+')*(l.cache_lon-'+lon+')+(l.cache_lat-'+lat+')*(l.cache_lat-'+lat+')'}];
+					tables = [{ 'locations':'l LEFT JOIN items i ON l.cache_id=i.cache_location_id LEFT JOIN itemactions a ON i.cache_id=a.cache_item_id'}];
+					conds = { ' (i.cache_id IS NULL OR a.cache_id=(select max( ia.cache_id) from items it, itemactions ia where l.cache_id=it.cache_location_id AND it.cache_id=ia.cache_item_id))':''};
+					
+					
+					sp = new RetrievalParameters( conds, true, 'dist ASC', '0, '+location.pageSizeLocal);
+					sp.cachable = false;
+					sp.fields = fields;
+					if ( tables != null) sp.tables = tables;
+
+				} else {
+					sp = filterPopup.getFilter( location, _mapView.view, lon, lat);
+				}
+
+				retrieveLocations( sp);
+			}
+			
+			protected function retrieveLocations( sp:RetrievalParameters):void {
+				setLocations( location.list( sp));
+			}
+			
+			protected function showLocations( evt:ResultEvent, token:Object=null):void {
+				
+				var res:Array = evt.result as Array;
+				
+				debug( "found POIs #["+res.length+"]");
+				/*				
+				for( var j:int = 0; j < res.length; j++) {
+				debug( res[ j].Standort+" @ "+res[j].location);
+				}
+				*/				
+				
+				setLocations(new ArrayCollection( res));
+			}
+			
+			protected function setLocations( ac:ArrayCollection):void {
+				debug( "set locations. #"+ac.length);
+				
+				acLocations.removeAll();
+				
+				acLocations.addAll( ac);
+				acLocations.refresh();
+				
+				_mapView.adaptView();
+			}
+			
+			//----------------------------------------------------------------------------------------------
+			
+			protected function debug( txt:String):void {
+				trace( "signs: "+txt);
+			}			
+		]]>
+	</fx:Script>
+	<s:layout.phone_portrait>
+		<s:VerticalLayout gap="0"/>
+	</s:layout.phone_portrait>
+	<s:layout.phone_landscape>
+		<s:VerticalLayout gap="0"/>
+	</s:layout.phone_landscape>
+	<s:layout.pad_portrait>
+		<s:VerticalLayout gap="2"/>
+	</s:layout.pad_portrait>
+	<s:layout.pad_landscape>
+		<s:HorizontalLayout gap="2"/>
+	</s:layout.pad_landscape>
+	<s:ViewNavigator id="vnMap" width="100%" height="100%" label="Map" creationPolicy="all"
+					 firstView="views.MapView" title="Map"
+					 width.pad_landscape="50%"
+					 visible.phone_landscape="false" includeInLayout.phone_landscape="false"/>
+	<s:SplitViewNavigator id="svn" width="100%" height="100%" label="Projects" creationPolicy="all"
+						  width.pad_landscape="50%" backgroundColor.pad_landscape="0x808080"
+						  visible.phone_portrait="false" includeInLayout.phone_portrait="false">
+		<s:layout>
+			<s:HorizontalLayout gap="2"/>
+		</s:layout>
+		<!-- s:ViewNavigator id="vnProjects" height="100%"
+		width="160" title="Projects" firstView="views.ProjectView"/ -->
+		<s:ViewNavigator id="vnPOIs" width="30%" height="100%" label="List"
+						 firstView="views.PoiListView" title="List"
+						 visible.phone_portrait="false" includeInLayout.phone_portrait="false"/>
+		<s:ViewNavigator id="vnDetail" width="70%" height="100%" label="Location"
+						 firstView="views.EditView" title="Location">
+			<s:navigationContent>
+				<!-- s:Button id="bList" label="Map" click="handleSwapMap( event);"  includeInLayout.pad_landscape="false" visible.pad_landscape="false" includeInLayout.pad_portrait="false" visible.pad_portrait="false"/ -->
+				<!-- s:Button id="bProjects" right="5" top="5" height="40" label="Projects" click="svn.showFirstViewNavigatorInPopUp( bProjects);" includeInLayout="false" visible="false" includeInLayout.phone_portrait="true" visible.phone_portrait="true"/>
+				<ns2:ListCalloutButton id="bPois" right="5" top="5" height="40" label="POIs" includeInLayout="false" visible="false" includeInLayout.phone_portrait="true" visible.phone_portrait="true"/ -->
+			</s:navigationContent>
+			<s:actionContent>
+				<!-- s:Button id="bPrev" right="5" top="5" height="40" label="prev" click="prevPoi( event);" / -->
+				<!-- s:Button id="bAdd" right="5" top="5" emphasized="true" label="+" click="addLocation( event);" / -->
+				<!-- s:Button id="bNext" right="5" top="5" height="40" label="next" click="nextPoi( event);" / -->
+			</s:actionContent>
+		</s:ViewNavigator>
+	</s:SplitViewNavigator>
+</s:Group>

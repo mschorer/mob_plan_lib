@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark"
+				width="100%">
+	<s:layout>
+		<s:HorizontalLayout paddingBottom="0" paddingLeft="4" paddingRight="0" paddingTop="0"
+							verticalAlign="middle"/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:DateTimeFormatter id="dFmt" dateTimePattern="dd. MMMM yyyy HH:mm:ss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				
+//				trace( "  -- "+dest);
+				
+				if ( dest != 0 && dest != null) {
+					var ifc:NetworkInterface = data as NetworkInterface;
+					
+					cbActive.selected = ifc.active;
+					lName.text = ifc.displayName;
+					lAddress.text = ( ifc.addresses.length > 0) ? ifc.addresses.shift().address : '---';
+				}
+			}
+			
+			override public function get data():Object {
+				return super.data;
+			}	
+			
+			protected function ovrClick( evt:Event):void {
+				var ifc:NetworkInterface = data as NetworkInterface;
+				
+				cbActive.selected = ifc.active;
+			}
+		]]>
+	</fx:Script>
+	<s:CheckBox id="cbActive" click="ovrClick( event);"/>
+	<s:Label id="lName" width="100%" styleName="interfaceLabel"/>
+	<s:Label id="lAddress" width="80" styleName="interfaceLabel"/>
+</s:ItemRenderer>

@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:SpinnerListContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						xmlns:s="library://ns.adobe.com/flex/spark" creationComplete="initUI(event)" >
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import models.SignsTag;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.events.IndexChangeEvent;
+			
+			protected static var valueTree:ArrayCollection;
+			protected static var valueMap:Dictionary;
+
+			protected function initUI(event:FlexEvent):void {
+
+				debug( "init");
+				if ( valueTree == null) {
+					
+					valueMap = new Dictionary();
+					
+					var tag:SignsTag = new SignsTag();
+					valueTree = tag.list();
+					
+					buildTree( valueTree);
+				}
+				
+				slCategory.dataProvider = valueTree;
+				slCategory.selectedIndex = 0;
+				
+				slType.dataProvider = SignsTag( valueTree.getItemAt(0)).getChildren();
+			}
+			
+			protected function buildTree( tags:ArrayCollection):void {
+
+				var tag:SignsTag;
+				
+				var i:int = 0;
+				while( i < tags.length) {
+					tag = tags.getItemAt( i) as SignsTag;
+					
+					valueMap[ tag.cache_id] = tag;
+					
+					if ( tag.parent_id != 0) {
+						
+						var cNodes:ArrayCollection = new ArrayCollection();
+						
+						for( var j:int = 0; j < i; j++) {
+							var ch:SignsTag = tags.getItemAt( j) as SignsTag;
+							if ( tag.parent_id == ch.id) {
+								cNodes.addItem( tag);
+								//									its.removeItemAt( i);
+								break;
+							}
+						}
+						
+						tag.setChildren( cNodes);
+					}							
+					
+					i++;
+				}
+				
+				i = 0;
+				while( i < tags.length) {
+					tag = tags.getItemAt( i) as SignsTag;
+					if ( tag.parent_id == 0) i++;
+					else tags.removeItemAt( i);
+				}
+			}
+
+			public function set value( type:int):void {
+				/*
+				var xNode:XMLList = xmlTypes.descendants().(attribute("data")==type);
+				if ( xNode.length() > 0) {
+					var subtype:XML = xNode[0];
+					var mType:XML = xNode[0].parent();
+					
+					slCategory.selectedItem = mType;
+					
+					slType.dataProvider = new XMLListCollection( mType.*);
+					
+					slType.selectedItem = subtype;
+				}
+				*/
+			}
+			
+			public function get value():int {
+				return parseInt( slType.selectedItem.@data.toString());
+			}
+
+			protected function selMaster( evt:IndexChangeEvent):void {
+				var xNode:XML = slCategory.selectedItem;
+				
+				if ( xNode == null) return;
+				
+				debug( "sel: "+xNode.@name);
+				slType.dataProvider = new XMLListCollection( xNode.*);
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+			
+		]]>
+	</fx:Script>
+	<s:SpinnerList id="slCategory" width="100%" height="100%" change="selMaster( event);"
+				   labelField="@name" wrapElements="false"/>
+	<s:SpinnerList width="20" height="100%" enabled="false" labelField="name"
+				   selectedIndex="1">
+		<s:ArrayList>
+			<fx:Object name="-" data="-1"></fx:Object>
+		</s:ArrayList>
+	</s:SpinnerList>
+	<s:SpinnerList id="slType" width="100%" height="100%" labelField="@name" wrapElements="false"/>
+</s:SpinnerListContainer>

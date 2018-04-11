@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:SpinnerListContainer xmlns:fx="http://ns.adobe.com/mxml/2009"
+						xmlns:s="library://ns.adobe.com/flex/spark"
+						width="180" creationComplete="initUI(event)">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import models.SignsIcon;
+			import models.SignsIconMap;
+			import models.SignsItem;
+			import models.SignsTag;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.events.IndexChangeEvent;
+			
+			protected var _iconList:ArrayCollection;
+			
+			protected var _controlList:Array;
+			protected var _selectedIcons:ArrayCollection;
+
+			protected var _item:SignsItem;
+			
+			protected function initUI(event:FlexEvent):void {
+
+				if ( _controlList == null) {
+					_controlList = new Array();
+					
+					_controlList[0] = slIcon0;
+					_controlList[1] = slIcon1;
+					_controlList[2] = slIcon2;
+					_controlList[3] = slIcon3;
+				}
+				
+				debug( "init");
+				if ( _iconList == null) _iconList = AppSettings.iconList;
+
+				slIcon0.dataProvider = _iconList;
+				slIcon1.dataProvider = _iconList;
+				slIcon2.dataProvider = _iconList;
+				slIcon3.dataProvider = _iconList;
+				
+				presetControls();
+			}
+			
+			public function set item( i:SignsItem):void {
+				_item = i;
+			}
+			
+			public function get item():SignsItem {
+				return _item;
+			}
+			
+			public function set value( idList:ArrayCollection):void {
+				if ( _selectedIcons == null) _selectedIcons = new ArrayCollection( [ null, null, null]);
+				
+				for( var i:int = 0; i < _selectedIcons.length; i++) {
+					_selectedIcons.setItemAt( ( i < idList.length) ? idList.getItemAt( i) : null, i);
+				}
+				
+				if ( _controlList != null) presetControls();
+			}
+			
+			protected function presetControls():void {
+				for( var i:int=0; i < _controlList.length; i++) {
+					var ict:SignsIconMap = ( i < _selectedIcons.length) ? (_selectedIcons.getItemAt( i) as SignsIconMap) : null;
+					
+					if ( ict == null || ict.cache_icon_id == -1) {
+						SpinnerList( _controlList[ i]).selectedIndex = 0;
+					} else {
+						var idx:int = AppSettings.iconIndexById( ict.cache_icon_id);
+						SpinnerList( _controlList[ i]).selectedIndex = idx;
+					}
+				}
+			}
+			
+			public function get value():ArrayCollection {
+				var res:ArrayCollection = new ArrayCollection();
+
+				for( var i:int=0; i < _controlList.length; i++) {
+					var ict:SignsIcon = SpinnerList( _controlList[ i]).selectedItem;
+					var icm:SignsIconMap = ( i < _selectedIcons.length) ? (_selectedIcons.getItemAt( i) as SignsIconMap) : null;
+					
+					if ( ict.cache_id >= 0) {
+						res.addItem( ict);
+					}
+				}
+				
+				return res;
+			}
+			
+			protected function handleChange( idx:int):void {
+				var icon:SignsIcon = SpinnerList( _controlList[ idx]).selectedItem;
+				var iconMap:SignsIconMap = ( idx < _selectedIcons.length) ? (_selectedIcons.getItemAt( idx) as SignsIconMap) : null;
+				
+				if ( icon.cache_id > 0 && iconMap == null) {
+					iconMap = new SignsIconMap( { icon_id:icon.id, cache_icon_id:icon.cache_id, item_id:_item.id, cache_item_id:_item.cache_id}); 
+					iconMap.save();
+					_selectedIcons.setItemAt( iconMap, idx);
+					return;
+				}
+				if ( iconMap != null) {
+					iconMap.icon_id = icon.id;
+					iconMap.cache_icon_id = icon.cache_id;
+					
+					iconMap.cache_modified = new Date();
+
+					iconMap.save();
+/*					
+					if (icon.cache_id >= 0) {
+						iconMap.save();
+					} else {
+						iconMap.del();
+						_selectedIcons.setItemAt( null, idx);
+					}
+*/
+				}
+			}
+
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+			
+		]]>
+	</fx:Script>
+	<s:SpinnerList dataProvider="{_iconList}" id="slIcon0" change="handleChange(0)" width="65" height="100%" labelField="name" itemRenderer="de.ms_ite.mobile.topplan.renderer.IconItemRenderer"/>
+	<s:SpinnerList dataProvider="{_iconList}" id="slIcon1" change="handleChange(1)" width="65" height="100%" labelField="name" itemRenderer="de.ms_ite.mobile.topplan.renderer.IconItemRenderer"/>
+	<s:SpinnerList dataProvider="{_iconList}" id="slIcon2" change="handleChange(2)" width="65" height="100%" labelField="name" itemRenderer="de.ms_ite.mobile.topplan.renderer.IconItemRenderer"/>
+	<s:SpinnerList dataProvider="{_iconList}" id="slIcon3" change="handleChange(2)" width="65" height="100%" labelField="name" itemRenderer="de.ms_ite.mobile.topplan.renderer.IconItemRenderer"/>
+</s:SpinnerListContainer>

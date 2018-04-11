@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		title="Locations"
+		creationComplete="initUI( event);">
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:RemoteObject id="locService" fault="faultHandler( event)" source="Topplan" destination="amfphp">
+			<s:method name="getProjects" result="listProjects( event);" />
+		</s:RemoteObject>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.rpc.remoting.RemoteObject;
+			
+			import spark.components.SplitViewNavigator;
+			import spark.events.IndexChangeEvent;
+			
+			protected var acProjects:ArrayCollection;
+
+			protected function initUI( event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				
+				acProjects = new ArrayCollection();
+			}
+			
+			protected function handleSearch( lon:Number, lat:Number):void {
+				debug( "search for ["+lon+" - "+lat+"]");
+
+				locService.getOperation( 'getProjects').send( lon, lat);
+			}
+			
+			protected function listProjects( evt:ResultEvent):void {
+				
+				var res:Array = evt.result as Array;
+				
+				acProjects.removeAll();
+				
+				debug( "found Projects #["+res.length+"]");
+				/*				
+				for( var j:int = 0; j < res.length; j++) {
+				debug( res[ j].label+" - "+res[ j].data);
+				}
+				*/				
+				acProjects.addAll( new ArrayCollection( res));
+				
+				list.dataProvider = acProjects;
+			}
+
+			private function faultHandler( fault:FaultEvent):void {
+				debug( "err: "+fault);
+				//			    CursorManager.removeBusyCursor();
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			protected function handleSelect(event:IndexChangeEvent):void {
+				
+				debug( "select: "+list.selectedItem);
+				
+//				(this.parentDocument as mob_ix).tvnDetail.activeView.data=list.selectedItem;
+//				(this.parentDocument as mob_ix).svn.hideViewNavigatorPopUp();
+				SplitViewNavigator( navigator.parentNavigator).hideViewNavigatorPopUp();
+				
+				navigator.dispatchEvent( new IndexChangeEvent( IndexChangeEvent.CHANGE));
+			}
+			
+			public function get selectedItem():Object {
+				return list.selectedItem;
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+		]]>
+	</fx:Script>
+	<!-- s:HGroup width="100%">
+		<s:TextInput id="pattern" width="100%"text="%"/>
+		<s:Button label="Search" click="handleSearch( event);"/>
+	</s:HGroup -->
+	<s:List id="list" labelField="name"  width="100%" height="100%" change="handleSelect(event)" />
+</s:View>

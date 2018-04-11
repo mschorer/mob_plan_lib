@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		creationComplete="initUI( event);" xmlns:ns="de.ms_ite.mobile.topplan.components.*">
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.popups.FilterPopup;
+			
+			import models.SignsLocation;
+			
+			import mx.collections.ArrayCollection;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.collections.Sort;
+			import spark.collections.SortField;
+			import spark.components.SplitViewNavigator;
+			import spark.events.IndexChangeEvent;
+			
+			protected var items:ArrayCollection;
+			
+//			protected var filterPopup:FilterPopup;
+			
+			protected function initUI( event:Event):void {
+				// TODO Auto-generated method stub
+				
+//				items = new ArrayCollection();
+
+			}
+			
+			public function set dataProvider( ac:ArrayCollection):void {
+				items = ac;
+				list.dataProvider = items;
+			}
+			
+			public function get dataProvider():ArrayCollection {
+				return items;
+			}
+
+			protected function selectItem(event:IndexChangeEvent):void {
+				
+				debug( "select: "+list.selectedItem);
+				list.ensureIndexIsVisible( list.selectedIndex);
+				
+				SplitViewNavigator( navigator.parentNavigator).hideViewNavigatorPopUp();
+
+				navigator.dispatchEvent( new IndexChangeEvent( IndexChangeEvent.CHANGE));
+			}
+			
+			public function get selectedItem():Object {
+				return list.selectedItem;
+			}
+			
+			public function set selectedItem( o:Object):void {
+				list.selectedItem = o;
+				var si:int = items.getItemIndex( o);
+				list.ensureIndexIsVisible( si);
+
+				navigator.dispatchEvent( new IndexChangeEvent( IndexChangeEvent.CHANGE));
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}
+/*			
+			protected function filterLocationsOpen(event:MouseEvent):void {
+				if ( filterPopup == null) {
+					filterPopup = new FilterPopup();
+					
+					filterPopup.percentWidth = 90;
+					filterPopup.percentHeight = 90;
+					
+					filterPopup.addEventListener( Event.COMPLETE, filterLocations);
+				}
+				
+				if ( !filterPopup.isOpen) filterPopup.open( DisplayObjectContainer( this.parentApplication), true);
+				filterPopup.preset();				
+			}
+
+			protected function filterLocations(event:Event):void {
+				// TODO Auto-generated method stub
+				debug( "filter locations.");
+				
+				var evt:TopEvent = new TopEvent( TopEvent.APPLY_FILTER, true);
+				evt.pageSize = filterPopup.pageSize;
+				evt.filterTagIDs = filterPopup.filterTagIDs;
+				evt.filterName = filterPopup.nameFilter;
+				
+				dispatchEvent( evt);
+			}
+*/
+			protected function labelFunc( obj:Object):String {
+				if ( obj is SignsLocation) {
+					var l:SignsLocation = obj as SignsLocation;
+					return (l.name != null && l.name.length > 0) ? l.name : "["+l.tag_major+"-"+l.tag_minor+"]";
+				} else return obj[ 'name'];
+			}
+		]]>
+	</fx:Script>
+	<!-- s:actionContent>
+		<s:Button id="cbOptions" label="Filter" click="filterLocationsOpen(event)"/>
+	</s:actionContent -->
+	<s:List id="list" width="100%" height="100%" change="selectItem(event)" fontSize="13"
+			labelField="name" labelFunction="labelFunc">
+	</s:List>
+</s:View>

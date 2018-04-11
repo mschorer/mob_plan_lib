@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				   xmlns:s="library://ns.adobe.com/flex/spark"
+				   xmlns:mx="library://ns.adobe.com/flex/mx"
+				   borderColor="#FFFFFF" cornerRadius="3">
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			public function set status( v:int):void {
+				
+				if ( v < 0) return;
+				
+				var sObj:Object = AppSettings.getStatusType( v);
+				var col:int = (sObj == null) ? 0xc0c0c0 : sObj.col as int;
+				setStyle( 'backgroundColor', col);
+				lStatus.text = ( sObj == null) ? 'X' : sObj.short as String;
+				
+				/*
+				switch( v) {
+					case -10000:
+						setStyle( 'backgroundColor', 0xc0c0c0);
+						lStatus.text = '???';
+						break;
+					
+					case AppSettings.STATUS_NOP:
+						setStyle( 'backgroundColor', 0xc0c0c0);
+						lStatus.text = 'NOP';
+						break;
+					
+					case AppSettings.STATUS_OK:
+						setStyle( 'backgroundColor', 0x80ff80);
+						lStatus.text = 'OK';
+					break;
+					
+					case AppSettings.STATUS_ERROR: 
+						setStyle( 'backgroundColor', 0xf08080);
+						lStatus.text = 'ERR';
+					break;
+					
+					case AppSettings.STATUS_DELETED: 
+						lStatus.text = 'DEL';
+						setStyle( 'backgroundColor', 0xe0e0e0);
+					break;
+					
+					case AppSettings.STATUS_UNDEF: 
+					default:
+						lStatus.text = ( sObj == null) ? '---' : sObj.label as String;
+						setStyle( 'backgroundColor', 0xc0c0c0);
+				}
+				*/
+			}
+		]]>
+	</fx:Script>
+	<s:Label id="lStatus" fontSize="14" horizontalCenter="0" text="OK" textAlign="center"
+			 verticalCenter="0"/>
+</s:BorderContainer>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:IconItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+					xmlns:s="library://ns.adobe.com/flex/spark"
+					width="100%"
+					messageStyleName="msgStyle"
+					labelField="label"
+					messageField="data"
+					iconFunction="iconFunc"
+					labelFunction="labelFunc"
+					messageFunction="msgFunc">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:DateTimeFormatter id="dFmt" dateTimePattern="dd. MMMM yyyy HH:mm:ss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			[Embed(source="assets/traffic-lights-green-icon.png")]
+			protected var greenClass:Class;
+			
+			[Embed(source="assets/traffic-lights-yellow-icon.png")]
+			protected var yellowClass:Class;
+			
+			[Embed(source="assets/traffic-lights-red-icon.png")]
+			protected var redClass:Class;
+			
+			protected function iconFunc( item:Object):Object {
+				var icon:Class = null;
+				//				trace( "["+item.@icon+"] "+((item.@icon == 'iconAtom') ? 'ATOM' : 'RSS'));
+				
+				icon = greenClass;
+				//item.pointing
+				
+				return icon; 
+			}
+			
+			protected function labelFunc( item:Object):Object {
+				return item.dest_a;
+			}
+			
+			protected function msgFunc( item:Object):Object {
+				return item.dest_b;
+			}
+		]]>
+	</fx:Script>
+</s:IconItemRenderer>

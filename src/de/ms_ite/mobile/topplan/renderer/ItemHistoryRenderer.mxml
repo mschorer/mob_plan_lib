@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark"
+				creationComplete="initUI( event)"
+				width="100%" currentState="list">
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<s:states>
+		<s:State name="list"/>
+		<s:State name="endOfList"/>
+	</s:states>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:DateTimeFormatter id="dFmt" dateTimePattern="dd. MMMM yyyy HH:mm:ss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import flash.filesystem.File;
+			
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.SignsAction;
+
+			protected var _data:SignsAction;
+			protected var eStatus:XMLList;
+
+			protected function initUI( evt:Event):void {
+				if ( _data != null) updateUI();
+			}
+			
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				
+				if ( dest != 0 && dest != null) {
+					if ( dest is SignsAction) {
+						_data = SignsAction( dest);
+						currentState = 'list';
+					} else {
+						_data = new SignsAction( dest);
+						currentState = 'endOfList';
+					}
+					
+					updateUI();
+				}
+			}
+			
+			protected function updateUI():void {
+
+				if ( lName == null || _data == null || _data.user_id <= 0 || _data.cache_id < 0) return;
+				
+				lName.text = _data.name;
+				lName.includeInLayout = lName.visible = ( lName.text!= null && lName.text.length > 0);
+
+				var desc:String = "";
+				var nd:String = _data.estatus.toString( 16).toLowerCase();
+				var nd2:String = _data.type.toString( 16).toLowerCase();
+				if ( eStatus == null) eStatus = AppSettings.actionEStatusXML;
+				var xNode:XMLList = eStatus.*.(attribute("data")==nd);	//item.(attribute("data")==nd2)						
+				if (( xNode.length() > 0) && ( xNode[0].@name.toString() != '---')) desc = xNode[0].@name;
+
+				if ((_data.description != null) ? (_data.description.length > 0) : false) {
+					if (desc.length > 0) desc += ' - ';
+					desc += _data.description;
+				}
+				
+				lDescription.text = desc;
+				lDescription.includeInLayout = lDescription.visible = ( desc.length > 0);
+				
+				var statusType:Object = AppSettings.getStatusType( _data.status);
+				lStatus.text = ( statusType != null) ? statusType.label : '---';
+
+				var actionType:Object = AppSettings.getActionType( _data.type);
+				lType.text = ( actionType != null) ? actionType.label : '---';
+
+				lUser.text = ( _data.user_id > 0) ? AppSettings.getUserById(_data.user_id).username : '???';
+				
+				lChanged.text = dFmt.format(( _data.modified != null) ? _data.modified : _data.cache_modified);
+
+				var localImageExists:Boolean = false;
+				var remoteImageExists:Boolean = ( _data.url != null && _data.url.length > 0);
+				
+				if ( _data.cache_url != null && _data.cache_url.length > 0) {
+					var cimg:File = new File( _data.cache_url);
+					localImageExists = cimg.exists;
+				}
+				
+				if ( AppSettings.imageAccessOnline ? ( !remoteImageExists) : localImageExists) {
+					iImage.source = _data.cache_url;
+					
+//					iImage.width = parent.width;
+//					iImage.height = parent.height;	//parent.width * 0.75;
+					
+					lImagePath.text = _data.cache_url;
+					lImagePath.visible = lImagePath.includeInLayout = true;
+					iImage.visible = iImage.includeInLayout = true;
+				} else {
+					if ( /* AppSettings.online && */ _data.url != null && _data.url.length > 0) {
+						var remotePath:String = ( _data.url.indexOf( 'http') == 0) ? _data.url : (AppSettings.appBaseUrl + AppSettings.imageRootPath +"/"+ _data.url);
+						iImage.source = remotePath;
+//						debug( "  img ["+_data.cache_item_id+"] ["+_data.url+"] ["+remotePath+"]");
+						
+						lImagePath.text = remotePath;
+						lImagePath.visible = lImagePath.includeInLayout = true;
+						iImage.visible = iImage.includeInLayout = true;
+					} else {
+						lImagePath.visible = lImagePath.includeInLayout = false;
+						iImage.visible = iImage.includeInLayout = false;
+					}
+				}
+				
+				if ( actionType != null) lType.setStyle( 'backgroundColor', actionType.col);
+				if ( statusType != null) {
+					lStatus.setStyle( 'backgroundColor', statusType.col);
+//						bcBack.setStyle( 'backgroundColor', statusType.col);
+				}
+			}
+			
+			override public function get data():Object {
+				return _data;
+			}
+			
+			protected function buildLabel( item:Object):Object {
+				return ( item.name);
+			}
+			
+			protected function buildMessage( item:Object):Object {
+				return ( item.description);
+			}
+			
+			protected function buildUrl( item:Object):Object {
+				var url:String = AppSettings.appBaseUrl + AppSettings.imageRootPath +"/"+ item.url;
+
+				return url;
+			}
+						
+			protected function zoomImage(event:MouseEvent):void {
+				var evt:TopEvent = new TopEvent( TopEvent.IMAGE_ZOOM, true);
+				evt.source = iImage.source;
+				
+				dispatchEvent( evt);				
+			}
+			
+			protected function expandList( evt:MouseEvent):void {
+				dispatchEvent( new TopEvent( TopEvent.EXPAND_LIST, true));
+				evt.stopImmediatePropagation();
+			}
+			
+			protected function debug( txt:String):void {
+//				trace( this.name+": "+txt);
+			}
+		]]>
+	</fx:Script>
+	<s:BorderContainer id="bcBack" includeIn="list" width="100%" height="100%" borderStyle="inset">
+		<s:layout>
+			<s:BasicLayout/>
+		</s:layout>
+		<s:Image id="iImage" width="100%" height="75" scaleMode="letterbox" click="zoomImage(event)"
+				 top="0" left="0"/>
+		<s:Label id="lImagePath" styleName="historyDescription" text="fileName"
+				 left="0" right="0" bottom="0"/>
+		<s:HGroup width="100%" height="100%">
+			<s:VGroup left="0" top="0" width="100%" height="100%" paddingBottom="4" paddingTop="4">
+				<s:Label id="lChanged" styleName="historyDate" text="date"/>
+				<s:Label id="lName" width="100%" styleName="historyUser" text="name"/>
+				<s:Label id="lDescription" width="100%" height="100%" styleName="historyDescription" text="description"/>
+			</s:VGroup>
+			<s:VGroup width="85" height="100%" contentBackgroundAlpha="0.6" gap="0" paddingBottom="0"
+					  paddingLeft="0" paddingRight="0" paddingTop="0">
+				<s:Label id="lUser" width="100%" height="100%" backgroundColor="#D0D0D0"
+						 paddingBottom="3" paddingLeft="4" paddingRight="4" paddingTop="5"
+						 styleName="historyUser" text="user" verticalAlign="middle"/><!-- backgroundColor="#6CC33D" -->
+				<s:Label id="lStatus" width="100%" height="100%"
+						 styleName="historyStatus" backgroundColor="#559BCC"
+						 paddingBottom="3" paddingLeft="4"
+						 paddingRight="4" paddingTop="5" text="status" verticalAlign="middle"/>
+				<s:Label id="lType" width="100%" height="100%" backgroundColor="#A553C3"
+						 styleName="historyAction" 
+						 paddingBottom="3" paddingLeft="4" paddingRight="4" paddingTop="5"
+						 text="type" verticalAlign="middle"/>
+			</s:VGroup>
+		</s:HGroup>
+	</s:BorderContainer>
+	<s:BorderContainer id="bcBackEOL" includeIn="endOfList" width="100%"
+					   backgroundColor="#FFDDDD" borderStyle="inset" click="expandList( event)">
+		<s:Label top="10" horizontalCenter="0"
+			 text="Click to load more ..."/>
+	</s:BorderContainer>
+</s:ItemRenderer>

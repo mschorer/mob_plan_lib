@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark" click="itemClick(event)"
+				width="200">
+	<s:layout>
+		<s:HorizontalLayout paddingBottom="0" paddingLeft="4" paddingRight="0" paddingTop="0"
+							verticalAlign="middle"/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:DateTimeFormatter id="dFmt" dateTimePattern="dd. MMMM yyyy HH:mm:ss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.TagWrapper;
+			
+			import spark.components.List;
+
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				
+//				trace( "  -- "+dest);
+				
+				if ( dest != 0 && dest != null) {
+					var st:TagWrapper = data as TagWrapper;
+					
+					lName.text = st.label;
+					cbActive.selected = st.selected;
+				}
+			}
+			
+			override public function get data():Object {
+				return super.data;
+			}	
+			
+			protected function ovrClick( evt:Event):void {
+				debug( "toggle cb");
+
+				var st:TagWrapper = data as TagWrapper;
+				if ( st != null) st.selected = cbActive.selected;
+				
+				evt.stopImmediatePropagation();
+			}
+
+			protected function itemClick(event:MouseEvent):void {
+//				debug( "toggle");
+//				cbActive.selected = !cbActive.selected;
+
+				event.stopImmediatePropagation();
+			}
+			
+			protected function debug( txt:String):void {
+				trace( this.className+": "+txt);
+			}
+		]]>
+	</fx:Script>
+	<s:CheckBox id="cbActive" change="ovrClick( event);"/>
+	<s:Label id="lName" width="100%" styleName="mapItemLabel"/>
+</s:ItemRenderer>

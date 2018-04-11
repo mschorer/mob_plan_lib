@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark"
+		   xmlns:ns="de.ms_ite.mobile.*" width="100%" height="100%" minWidth="750" 
+		   creationComplete="initUI(event)"
+		   contentBackgroundAppearance="none">
+	<!-- creationComplete="initUI(event);" -->
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<s:states>
+		<s:State name="new"/>
+		<s:State name="edit"/>
+	</s:states>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.SignsItem;
+			import models.SignsModel;
+			
+			import mx.events.FlexEvent;
+			
+			import views.ItemEditViewStated;
+			
+			protected var item:SignsItem;
+			public var addModeCreate:Boolean;
+			
+			protected var iEditor:ItemEditViewStated;
+			protected var canSave:Boolean = true;
+			
+			protected function initUI(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				
+				debug( "created.");
+				
+				busy = false;
+
+				iEditor = ItemEditViewStated( viewNav.activeView);
+				
+				iEditor.addEventListener(FlexEvent.ENTER_STATE, handleStateChange);
+				
+				iEditor.addEventListener( TopEvent.ITEM_ADD, handleItemAdded);
+				iEditor.addEventListener( TopEvent.ITEM_SAVED, handleItemSaved);
+				iEditor.addEventListener( TopEvent.ITEM_SAVE_ERROR, handleError);
+
+				iEditor.addEventListener( TopEvent.VALIDATION_FAIL, handleValidation);
+				iEditor.addEventListener( TopEvent.VALIDATION_OK, handleValidation);
+				
+				iEditor.validateForm();
+			}
+			
+			public function set data( dest:Object):void {
+				item = SignsItem( dest);
+				if ( iEditor != null) iEditor.data = dest;
+				debug( "setD "+(dest != null));
+				canSave = true;
+				
+				currentState = ( item.state == SignsModel.STATE_NEW) ? 'new' : 'edit';
+			}
+			
+			public function get data():Object {
+				return item;
+			}
+			
+			protected function handleStateChange( evt:FlexEvent):void {
+				debug( "state ["+iEditor.currentState+"]");
+				this.updatePopUpPosition();
+			}
+
+			protected function handleValidation(event:TopEvent):void {
+				debug( "  validation ["+event.type+"]");
+				
+				canSave = (event.type == (TopEvent.VALIDATION_OK));
+				addBestand.enabled = canSave;
+				done.enabled = canSave;
+			}
+			
+			protected function handleItemAdded(event:TopEvent):void {
+				debug( "  item added.");
+				
+				handleClose( null);
+				
+				var e:TopEvent = new TopEvent( event.type);
+				e.description = event.description;
+				
+				dispatchEvent( e);	//new TopEvent( event.type));
+			}
+
+			protected function handleItemSaved(event:TopEvent):void {
+				debug( "  item saved.");
+				
+				handleClose( null);
+
+				var e:TopEvent = new TopEvent( event.type);
+				e.description = event.description;
+				
+				dispatchEvent( e);	//new TopEvent( event.type));
+			}
+			
+			protected function handleClose(event:Event):void {
+				// TODO Auto-generated method stub
+				trace( "closed callout");
+				
+				busy = false;
+				close( true, iEditor.data);
+			}
+
+			protected function handleError(event:Event):void {
+				// TODO Auto-generated method stub
+				trace( "closed callout. ERROR!");
+
+				busy = false;
+				close( false);
+				
+				dispatchEvent( new TopEvent( TopEvent.ITEM_SAVE_ERROR));
+			}
+			
+			protected function set busy( b:Boolean):void {
+				bSave.includeInLayout = b;
+				bSave.visible = b;
+			}
+			
+			protected function saveItemAdd( evt:Event):void {
+			
+				addModeCreate = false;
+				busy = true;
+				iEditor.doSave( false);
+				canSave = false;
+			}			
+			
+			protected function saveItemNew( evt:Event):void {
+				
+				addModeCreate = true;
+				busy = true;
+				iEditor.doSave( true);
+				canSave = false;
+			}			
+			
+			protected function deleteItem( evt:Event):void {
+				
+				busy = true;
+				iEditor.doDelete(evt);
+				canSave = false;
+			}			
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+		]]>
+	</fx:Script>
+	<s:layout.new>
+		<s:BasicLayout/>
+	</s:layout.new>
+	<s:ViewNavigator title="Objekt" id="viewNav" width="100%" height="100%" firstView="views.ItemEditViewStated" firstViewData="{item}">
+		<s:navigationContent>
+			<s:Button label="X" click="close(false)"/>
+		</s:navigationContent>
+		<s:actionContent>
+			<s:BusyIndicator id="bSave" visible="false" includeInLayout="false"/>
+			<s:Button id="addBestand" visible.edit="false" includeInLayout.edit="false" label="Bestand" enabled="{canSave}" click="saveItemAdd( event);"/>
+			<s:Spacer width="40" height="100%"/>
+			<s:Button id="done" label.new="Neuplanung" label="Speichern" emphasized="true" enabled="{canSave}" click="saveItemNew( event);"/>
+		</s:actionContent>
+	</s:ViewNavigator>
+</s:Callout>

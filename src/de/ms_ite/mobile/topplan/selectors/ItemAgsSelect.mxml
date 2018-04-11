@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:HGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  minWidth="300" creationComplete="initUI( event)"
+		  verticalAlign="middle">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import spark.collections.NumericDataProvider;
+			
+			import models.SignsOwner;
+			
+			import mx.collections.ArrayList;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.components.TextInput;
+			import spark.events.IndexChangeEvent;
+			
+			protected var _locId:int;
+			protected var _locCoord:String;
+			
+			protected var _ags:String = null;
+						
+			protected var _options:ArrayList;
+			
+			protected static var ownerModel:SignsOwner;
+			
+			protected static var agsMap:Array = new Array( 0, 2, 2, 3, 5, 5, 8, 8, 12, 12);
+			
+			protected var _dataProvider:NumericDataProvider;
+			
+			protected var _spinners:Array;
+			protected var _textInput:TextInput;
+			
+			protected function initUI( evt:Event):void {
+				//				debug( "initUI");				
+				
+				if ( _ags != null) ags = _ags;
+			}
+			
+			override protected function createChildren():void {
+				
+				_dataProvider = new NumericDataProvider();
+				_dataProvider.minimum = 0;
+				_dataProvider.maximum = 9;
+				
+				if ( AppSettings.isDesktop) {
+					
+					_textInput = new TextInput();
+					_textInput.restrict = "0-9";
+					_textInput.maxChars = 8;
+					_textInput.widthInChars = 8;
+					
+					//					_textInput.addEventListener( Event.CHANGE, handleEdit);
+					_textInput.addEventListener( FocusEvent.FOCUS_IN, focusIn);
+					_textInput.addEventListener( FocusEvent.FOCUS_OUT, focusOut);
+					
+					hgSelectors.addElement( _textInput);
+				} else {
+					var dlc:SpinnerListContainer = new SpinnerListContainer();
+					dlc.percentWidth = 100;
+					dlc.height = 140;
+					
+					hgSelectors.addElement( dlc);
+					
+					_spinners = new Array();
+					for ( var i:int = 0; i < 11; i++) {
+						var spl:SpinnerList = new SpinnerList();
+						spl.addEventListener( Event.CHANGE, selectionChanged);
+						
+						switch( i) {
+							case 2:
+							case 4:
+							case 7:
+								spl.dataProvider = null;
+								break;
+							
+							default:
+							spl.dataProvider = _dataProvider;
+						}
+						
+						dlc.addElement( spl);
+						_spinners.push( spl);
+					}					
+				}
+				
+				super.createChildren();
+			}
+			
+/*			
+			public function set locationId( locid:int):void {
+				if ( _locId != locid) {
+					slOwner.enabled = false;
+					slOwner.dataProvider = null;
+
+					if ( ownerModel == null) ownerModel = new SignsOwner();
+					
+					if ( AppSettings.online) ownerModel.callService( 'getTagsForLocation', showTags, faultHandler, { location_id:locid});
+				} else updateSelection();
+				
+//				debug( "lookup ["+locid+"/"+_locId+"]");
+
+				_locId = locid;
+
+				switchState();
+			}
+*/			
+			public function get locationId():int {
+				return _locId;
+			}
+			
+			public function get ags():String {
+				_ags = '';
+				
+				if ( _textInput != null) {
+					_ags = zeroFill( _textInput.text);
+				} else {
+					_ags = getSpinnerVal();
+				}
+				
+				return _ags;
+			}
+			
+			public function set ags( val:String):void {
+				_ags = zeroFill( val);
+				
+				if ( _textInput != null) {
+					_textInput.text = _ags;
+				} else {
+					var chIdx:int = 0;
+					
+					for ( var i:int = 0; i < 11; i++) {
+						var spl:SpinnerList = _spinners[i] as SpinnerList;
+						
+						switch( i) {
+							case 2:
+							case 4:
+							case 7:
+								continue;
+							
+							default:
+								spl.selectedIndex = parseInt( _ags.charAt( chIdx++));
+								spl.dataProvider = _dataProvider;
+						}
+					}					
+				}
+			}
+			
+			protected function getSpinnerVal():String {
+				var ags:String = '';
+				var chIdx:int = 0;
+				
+				for ( var i:int = 0; i < 11; i++) {
+					var spl:SpinnerList = _spinners[i] as SpinnerList;
+					
+					switch( i) {
+						case 2:
+						case 4:
+						case 7:
+							continue;
+							
+						default:
+							ags += spl.selectedIndex;
+					}
+				}					
+
+				return ags;
+			}
+
+			protected function zeroFill( s:String):String {
+				
+				if ( s == null) return '09100000';
+				
+				s = s.substr(0,8);
+				return ('09100000'.substr( 0, 8-s.length)+s);
+			}
+			
+			protected function focusIn( evt:FocusEvent):void {
+				/*
+				var val:Number = parseInt( _textInput.text);
+				if ( ! isNaN( val)) _textInput.text = ''+val;
+				*/
+			}
+			
+			protected function focusOut( evt:FocusEvent):void {
+				_ags = _textInput.text = zeroFill( _textInput.text);				
+			}
+			
+			protected function selectionChanged( event:IndexChangeEvent):void {
+				_ags = getSpinnerVal();
+			}
+
+			//----------------------------------------------------------------------------------------
+			
+			public function set position( loc:String):void {
+				_locCoord = loc;
+				
+				if ( slOwner != null) {
+					slOwner.enabled = false;
+					slOwner.dataProvider = null;
+					bOk.enabled = false;
+					
+					if ( ownerModel == null) ownerModel = new SignsOwner();
+					
+					if ( AppSettings.online) ownerModel.callService( 'getTagsForGeom', showTags, faultHandler, { point:loc});
+				}
+				
+				bLookup.enabled = true;
+			}
+			
+			protected function lookupAGS( evt:Event):void {
+				
+				debug( "lookup ["+_locCoord+"]");
+				
+				slOwner.enabled = false;
+				bOk.enabled = false;
+				slOwner.dataProvider = null;
+				
+				if ( ownerModel == null) ownerModel = new SignsOwner();
+				ownerModel.callService( 'getTagsForGeom', showTags, faultHandler, { point:_locCoord});
+			}
+			
+			protected function showTags( evt:ResultEvent, token:Object=null):void {
+				
+				var res:Array = evt.result as Array;
+				
+				_options = new ArrayList( res);
+				
+				debug( "tags #"+_options.length);
+				slOwner.dataProvider = _options;
+				if ( _options.length > 0) slOwner.selectedIndex = _options.length -1;
+				
+				updateSelection();
+			}
+
+			protected function updateSelection():void {
+				var opt:Object;
+				
+				if ( _options == null) return;
+				
+				for( var i:int = 0; i < _options.length; i++) {
+					opt = _options.getItemAt( i);
+					
+					if ( _ags != null && String( opt.ags).indexOf( _ags) == 0) {
+						slOwner.selectedIndex = i;
+						break;
+					}
+				}
+				if ( opt != null) ags = opt.ags;
+				
+				debug( "owner #"+i+" / "+_options.length);
+				
+				slOwner.enabled = true;
+				bOk.enabled = true;
+			}
+
+			protected function handleOk( evt:Event):void {
+				debug( "ok.");
+				ags = slOwner.selectedItem.ags;
+				
+				bLookup.closeDropDown();
+			}
+			
+			protected function handleNack(evt:Event):void {
+				bLookup.closeDropDown();
+			} 
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+
+			//----------------------------------------------------------------------------------------
+
+			protected function debug( s:String):void {
+				//trace( this.className+": "+s);
+			}			
+		]]>
+	</fx:Script>
+	<s:HGroup id="hgSelectors"/>
+	<s:CalloutButton id="bLookup" label="?" click="lookupAGS( event)" enabled="false">
+		<s:HGroup width="300" paddingBottom="4" paddingLeft="4" paddingRight="4" paddingTop="4">
+			<s:SpinnerListContainer width="100%" height="140">
+				<s:SpinnerList id="slOwner" width="100%" height="100%" minWidth="150" fontWeight="normal" 
+							   labelField="name" wrapElements="false"/>
+			</s:SpinnerListContainer>
+			<s:VGroup>
+				<s:Button id="bOk" label="OK" click="handleOk(event)"/>
+				<s:Button id="bCancel" label="X" click="handleNack(event)"/>
+			</s:VGroup>
+		</s:HGroup>
+	</s:CalloutButton>
+</s:HGroup>

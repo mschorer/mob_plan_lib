@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:HGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+						xmlns:s="library://ns.adobe.com/flex/spark"
+						currentState="online" creationComplete="initUI(event)" show="activate(event)">
+	<s:states>
+		<s:State name="online"/>
+		<s:State name="offline"/>
+	</s:states>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import mx.collections.ArrayCollection;
+			
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.popups.OwnerPopup;
+			
+			import models.SignsOwner;
+			
+			import mx.collections.ArrayList;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+									
+			protected var _cache_id:int;
+			
+//			protected var _options:ArrayList;
+			
+//			protected static var _owners:ArrayCollection;
+
+			protected var ownerModel:SignsOwner;
+			protected var ownerPopup:OwnerPopup;
+			
+//			protected var _defStyle:int;
+						
+			
+			protected function initUI(event:FlexEvent):void {
+//				_defStyle = bSelect.getStyle( 'chromeColor');
+				
+				validateForm();
+			}
+			
+			protected function getOwnerCached( id:int):SignsOwner {
+/*				if ( _owners == null) {
+					_owners = AppSettings.ownerList;
+				}
+*/
+				var idx:int = AppSettings.ownerIndexById( id);
+				debug( "cached idx ["+idx+"]");
+				
+				if ( idx >= 0) {
+					ownerModel = AppSettings.ownerByIndex( idx);	// .ownerList.getItemAt( idx) as SignsOwner;
+				} else {
+/*
+					if ( ownerModel == null) ownerModel = new SignsOwner();
+	
+					ownerModel.cache_id = id;
+					ownerModel.load();
+*/
+					ownerModel = null;
+				}
+				
+				return ownerModel;
+			}
+			
+			public function get owner_id():int {
+				return ( ownerModel == null) ? -1 : ownerModel.id;
+			}
+			
+			public function set owner_id( val:int):void {
+			}
+			
+			public function get cache_owner_id():int {
+				return ( ownerModel == null) ? -1 : ownerModel.cache_id;
+			}
+			
+			public function set cache_owner_id( val:int):void {
+				debug( "setOwner ["+val+"]");
+				_cache_id = val;
+				
+				getOwnerCached( val);
+				validateForm();
+				
+				dispatchEvent( new Event( Event.CHANGE));
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			protected function activate(event:Event):void {
+				switchState();
+			}
+			
+			public function switchState():void {
+				currentState = AppSettings.online ? 'online' : 'offline';
+//				debug( "mode: "+currentState);
+			}
+			
+			protected function ownerSelectOpen(event:MouseEvent):void {
+				if ( ownerPopup == null) {
+					ownerPopup = new OwnerPopup();
+					
+					ownerPopup.addEventListener( Event.COMPLETE, ownerSelect);
+					
+//					ownerPopup.itemOwner = ownerModel;
+				}
+				
+				if ( !ownerPopup.isOpen) ownerPopup.open( DisplayObjectContainer( this.parentApplication), true);
+				PopUpManager.centerPopUp( ownerPopup);
+
+				ownerPopup.preset( ownerModel);				
+			}
+			
+			protected function ownerSelect(event:Event):void {
+				// TODO Auto-generated method stub
+				debug( "owner selected");
+				if ( ownerPopup != null) {
+					ownerModel = ownerPopup.itemOwner;
+					validateForm();
+					
+					dispatchEvent( new Event( Event.CHANGE));
+				}
+			}
+			
+			protected function validateForm():Boolean {
+				var rc:Boolean = (ownerModel != null && ownerModel.name != null);
+				
+				bSelect.emphasized = ! rc;
+				
+				bSelect.label = "Eigentümer ["+( rc ? ownerModel.name : "bitte setzen")+"]";
+/*				
+				if ( ownerModel != null && ownerModel.name != null) {
+					bSelect.setStyle( 'chromeColor', _defStyle);
+					bSelect.label = "Owner: "+ownerModel.name;
+					
+					rc = true;
+				} else {
+					bSelect.setStyle( 'chromeColor', 0xFFC231);
+					bSelect.label = "Owner: ???";
+					
+					rc = false;
+				}
+*/				
+				return rc;
+			}
+
+			protected function debug( s:String):void {
+//				trace( this.className+": "+s);
+			}						
+		]]>
+	</fx:Script>
+	<s:Button id="bSelect" width="100%" label="Select owner ..." click="ownerSelectOpen( event)"/>
+</s:HGroup>

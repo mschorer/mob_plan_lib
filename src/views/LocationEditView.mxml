@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:ns1="de.ms_ite.mobile.topplan.components.*"
+		xmlns:ns="de.ms_ite.mobile.*"
+		width="100%"
+		title="Standort" 
+		contentCreationComplete="initUI( event)" xmlns:ns2="de.ms_ite.mobile.topplan.selectors.*">
+	<s:layout>
+		<s:VerticalLayout gap="0" paddingBottom="4" paddingLeft="4" paddingRight="4" paddingTop="4"/>
+	</s:layout>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import flash.data.SQLResult;
+			
+			import models.Model;
+			import models.SignsLocation;
+			import models.SignsModel;
+			import models.StatusModel;
+			
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.IndexChangeEvent;
+			
+			protected var _location:SignsLocation;
+			protected var _saveEvent:TopEvent;
+			
+			protected var tiName:spark.components.TextInput;
+			protected var taDesc:spark.components.TextArea;
+			
+			protected function initUI( event:Event):void {
+				debug( "initUI");
+				
+				presetControls();
+			}
+			
+			override public function set data( src:Object):void {
+				super.data = src;
+				
+				if ( src != _location) {
+					if ( src is SignsLocation) _location = SignsLocation( src);
+					else _location = new SignsLocation( src);
+					
+				} else dragMode.selected = _location.getDragMode();
+
+				if ( slTagMajor != null) {
+					presetControls();
+					
+//					slTagMajor.switchState();
+				}
+			}
+			
+			override public function get data():Object {
+				return _location;
+			}
+			
+			protected function presetControls():void {
+				
+				debug( "set data: "+_location);
+
+//				slType.selectedIndex = Math.floor( _location.type / 100) -1;
+				locationType.type = _location.type;
+
+				if ( _location.state > SignsModel.STATE_NEW) {
+					slTagMajor.ags = _location.tag_major;
+					slTagMinor.serial = _location.tag_minor;
+				}
+				slTagMinor.serial = _location.tag_minor;
+				
+				slTagMajor.position = _location.location;
+				
+				dragMode.selected = _location.getDragMode();
+				
+				if ( tiName != null) {
+					vgName.removeElement( tiName);
+					tiName = null;
+				}
+				if ( tiName == null) {
+					tiName = new spark.components.TextInput();
+					tiName.percentWidth = 100;
+					vgName.addElement( tiName);
+				}
+				tiName.text = _location.name;
+				
+				if ( taDesc != null) {
+					vgDesc.removeElement( taDesc);
+					taDesc = null;
+				}
+				if ( taDesc == null) {
+					taDesc = new spark.components.TextArea();
+					taDesc.percentHeight = 100;
+					taDesc.percentWidth = 100;
+					taDesc.minHeight = 60;
+					taDesc.heightInLines = 3;
+					
+					vgDesc.addElement( taDesc);
+				}
+				taDesc.text = _location.description;
+			}
+			
+			public function doDelete( evt:Event):void {
+			}
+			
+			public function doSave( evt:Event):void {
+				
+				_location.type = locationType.type;	//parseInt( slType.selectedItem.data);
+				debug( "type ["+_location.type+"]");
+				
+				_location.tag_major = slTagMajor.ags;
+				_location.tag_minor = slTagMinor.serial;
+				debug( "serial ["+slTagMinor.serial+"] ["+_location.tag_minor+"]");
+				
+				_location.name = tiName.text;
+				_location.description = taDesc.text;
+				
+				debug( "save ["+_location.toString()+"]");
+				
+//				_location.callService( 'saveLocation', locSaved, faultHandler);
+				
+				if ( _location.state == SignsModel.STATE_NEW) _saveEvent = new TopEvent( TopEvent.LOCATION_ADD);
+				else _saveEvent = new TopEvent( TopEvent.LOCATION_SAVED);
+				
+				if ( AppSettings.online) {
+					_location.callService( 'save', locSavedConnected, faultHandler);
+				} else {
+					
+					_location.cache_modified = new Date();
+
+					if ( Model.asyncMode) {
+						var resp:Responder = new Responder( locSavedAsync, _location.defaultSqlErrorResponder);
+						_location.save( resp);					
+					} else {
+						_location.save();					
+						locationSaved();
+					}
+				}
+			}
+			
+			protected function locSavedAsync( sqe:SQLResult):void {
+				var b:Boolean = _location.saveResult( sqe);
+				debug( "  saved local async.");
+				locationSaved();
+			}
+			
+			protected function locSavedConnected( evt:ResultEvent, token:Object):void {
+				
+				var res:Array = evt.result as Array;
+				var status:StatusModel = new StatusModel( res[0]); 
+				
+				debug( "  saved remote async.");
+				if ( _saveEvent.type == TopEvent.LOCATION_ADD) _location.id = status.id;
+				locationSaved();
+			}
+			
+			protected function locationSaved():void {
+				debug( "saved location ["+_saveEvent.type+"] ["+_location+"]");
+				dispatchEvent( _saveEvent);
+				_saveEvent = null;					
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object):void {
+				debug( "err: "+fault);
+				//			    CursorManager.removeBusyCursor();
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+				dispatchEvent( new TopEvent( TopEvent.LOCATION_SAVE_ERROR));
+			}
+/*
+			protected function tagMinorChanged(event:IndexChangeEvent):void {
+				_location.tag_minor = '' + slTag2.selectedIndex + slTag1.selectedIndex + slTag0.selectedIndex;
+			}
+*/			
+			protected function setDragMode( evt:Event):void {
+				debug( "drag: "+dragMode.selected);
+				
+				_location.setDragMode( dragMode.selected);					
+
+				if ( dragMode.selected) dispatchEvent( new Event( Event.CANCEL));
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}							
+		]]>
+	</fx:Script>
+	<s:Scroller width="100%" height="100%" horizontalScrollPolicy="off">
+		<s:Group width="100%" height="100%">
+			<s:layout>
+				<s:VerticalLayout gap="0" paddingBottom="1" paddingLeft="1" paddingRight="1" paddingTop="1"/>
+			</s:layout>
+			<s:HGroup width="100%" verticalAlign="middle">
+				<s:VGroup width="200">
+					<s:Label paddingTop="4" text="Typ:" styleName="inputLabel"/>
+					<ns2:LocationTypeSelect id="locationType" width="100%"/>
+				</s:VGroup>
+				<s:HGroup>
+					<s:Label paddingTop="4" text="Drag Icon" styleName="inputLabel"/>
+					<s:ToggleSwitch id="dragMode" change="setDragMode( event)" label="drag"/>			
+				</s:HGroup>			
+			</s:HGroup>
+			<s:HGroup width="100%" verticalAlign="middle">
+				<s:VGroup gap="0">
+					<s:Label paddingTop="4" text="ID (AGS):" styleName="inputLabel"/>
+					<ns2:ItemAgsSelect id="slTagMajor"/>
+				</s:VGroup>
+				<s:VGroup gap="0">
+					<s:Label paddingTop="4" text="#:" styleName="inputLabel"/>
+					<ns2:ItemSerialSelect id="slTagMinor" width="100%"/>
+				</s:VGroup>
+			</s:HGroup>
+			<s:VGroup id="vgName" width="100%">
+				<s:Label paddingTop="4" text="Name:" styleName="inputLabel"/>
+				<!-- s:TextInput id="tiName" width="100%"/ -->
+			</s:VGroup>
+			<s:VGroup id="vgDesc" width="100%">
+				<s:Label paddingTop="4" text="Beschreibung:" styleName="inputLabel"/>
+				<!-- s:TextArea id="taDesc" width="100%" height="100%" minHeight="60" heightInLines="3"/ -->
+			</s:VGroup>
+		</s:Group>
+	</s:Scroller>
+</s:View>

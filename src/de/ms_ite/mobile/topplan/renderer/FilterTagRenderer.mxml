@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark" click="itemClick(event)"
+				width="200">
+	<s:layout>
+		<s:HorizontalLayout paddingBottom="0" paddingLeft="4" paddingRight="0" paddingTop="0"
+							verticalAlign="middle"/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:DateTimeFormatter id="dFmt" dateTimePattern="dd. MMMM yyyy HH:mm:ss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import models.SignsTag;
+			
+			import spark.components.List;
+
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				
+//				trace( "  -- "+dest);
+				
+				if ( dest != 0 && dest != null) {
+					var st:SignsTag = data as SignsTag;
+					
+					presetCheckbox();
+					lName.text = st.name;
+				}
+			}
+			
+			override public function get data():Object {
+				return super.data;
+			}	
+			
+			protected function ovrClick( evt:Event):void {
+				debug( "toggle cb");
+				changeSelection( data, cbActive.selected);
+			}
+
+			protected function presetCheckbox():int {
+				var sel:Vector.<Object> = List( this.owner).selectedItems;
+					
+				var idx:int = -1;
+				if ( sel != null) idx = sel.indexOf( data);
+				
+				cbActive.selected = (idx != -1);
+				
+				return idx;
+			}
+			
+			protected function changeSelection( obj:Object, flag:Boolean):Boolean {
+				var sel:Vector.<Object> = List( this.owner).selectedItems;
+				
+				if ( flag) {
+					var idx:int = -1;
+					if ( sel == null) sel = new Vector.<Object>();
+					else idx = sel.indexOf(obj);
+
+					if ( idx == -1) sel.push( obj);
+				} else {
+					if ( sel != null) {
+						idx = sel.indexOf(obj);
+						
+						if ( idx >= 0) sel = sel.splice( idx, 1);
+					}
+				}
+
+				List( this.owner).selectedItems = sel;
+				
+				return false;
+			}
+			
+			protected function itemClick(event:MouseEvent):void {
+				debug( "click item");
+				changeSelection( data, !cbActive.selected);
+			}
+			
+			protected function debug( txt:String):void {
+				trace( this.className+": "+txt);
+			}
+		]]>
+	</fx:Script>
+	<s:CheckBox id="cbActive" change="ovrClick( event);"/>
+	<s:Label id="lName" width="100%" styleName="filterItem"/>
+</s:ItemRenderer>

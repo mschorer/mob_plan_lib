@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark"
+				stateChangeComplete="stChange(event)"
+				><!-- click="itemClick(event)" contentBackgroundColor="#9E2828"  stateChangeComplete="stChange(event)" -->
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<s:states>
+		<s:State name="normal"/>
+		<s:State name="selected"/>
+		<s:State name="hovered"/>
+	</s:states>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:DateTimeFormatter id="dFmt" dateTimePattern="dd. MMMM yyyy HH:mm:ss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.TagWrapper;
+			
+			import models.SignsOwner;
+			import models.SignsIcon;
+			import models.SignsTag;
+			
+			import mx.events.FlexEvent;
+			
+			import spark.components.List;
+			
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				
+				//				trace( "  -- "+dest);
+				
+				if ( dest != 0 && dest != null) {
+					//					presetCheckbox();
+					var ic:SignsOwner = dest as SignsOwner;
+					
+					cbActive.label = ic.name;
+					lName.text = ic.ags;
+				}
+			}
+			
+			override public function get data():Object {
+				return super.data;
+			}	
+			
+			protected function ovrClick( evt:Event):void {
+				//				debug( "toggle cb ["+cbActive.selected+":"+currentState+"]");
+				cbActive.selected = (currentState == 'selected');
+			}
+			
+			protected function debug( txt:String):void {
+//				trace( this.className+": "+txt);
+			}
+			
+			protected function stChange(event:FlexEvent):void {
+				debug( "state chg ["+this.currentState+"] ["+( data.hasOwnProperty('cache_id') ? data.cache_id : '-')+"] ["+( data.hasOwnProperty('name') ? data.name : '-')+"]");
+			}
+			
+		]]>
+	</fx:Script>
+	<s:BorderContainer id="bcBack" width="100%" height="100%" cornerRadius="4"
+					   dropShadowVisible="false"
+					   backgroundColor.hovered="#A5E2A0"
+						backgroundColor.selected="#7ECC7A">
+		<s:layout>
+			<s:VerticalLayout gap="1" paddingBottom="2" paddingLeft="2"
+							  paddingRight="2" paddingTop="2"/>
+		</s:layout>
+		<s:CheckBox id="cbActive" label="name" change="ovrClick( event);" selected="false"
+					selected.selected="true"/>
+		<s:Label id="lName" width="100%" styleName="filterItem" text="ags"
+				 maxDisplayedLines.normal="1" showTruncationTip.normal="true"/>
+	</s:BorderContainer>
+</s:ItemRenderer>

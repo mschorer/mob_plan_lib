@@ -1,0 +1,387 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:ns="de.ms_ite.mobile.*"
+		xmlns:ns1="de.ms_ite.mobile.topplan.components.*"
+		width="100%" height="100%" creationComplete="initUI(event)" currentState="default" xmlns:ns2="de.ms_ite.mobile.topplan.selectors.*">
+	<s:layout>
+		<s:VerticalLayout gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<fx:Declarations>
+		<s:DateTimeFormatter id="fmt" dateTimePattern="yyyyMMdd_HHmmss" />
+	</fx:Declarations>
+	<s:states>
+		<s:State name="default"/>
+		<s:State name="post"/>
+		<s:State name="sign"/>
+		<s:State name="subsign"/>
+		<s:State name="label"/>
+		<s:State name="info"/>
+	</s:states>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.callouts.ImageCallout;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.RetrievalParameters;
+			import models.SignsAction;
+			import models.SignsIconMap;
+			import models.SignsItem;
+			import models.SignsModel;
+			import models.SignsTagMap;
+			import models.StatusModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.IndexChangeEvent;
+			import spark.events.ListEvent;
+
+			private var dataSource:IDataInput;
+			
+			protected var _item:SignsItem;
+			
+			protected var _fixType:int = -1;
+			protected var _fixSort:int = -1;
+			
+			protected var _itemTagMap:SignsTagMap;
+			protected var _tagMap:ArrayCollection;
+
+			protected var _itemIconMap:SignsIconMap;
+			protected var _iconMap:ArrayCollection;
+			
+			protected function initUI( event:Event):void {
+				debug( "initUI");
+				
+				presetControls();
+				
+				slOwner.addEventListener( Event.CHANGE, validateForm);
+			}
+			
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				debug( "set data ["+dest+"]");
+				
+				if ( true /*dest != _item*/) {
+					if ( dest is SignsItem) _item = SignsItem( dest);
+					else _item = new SignsItem( dest);
+					
+					presetDependent();
+
+					if ( selDir != null) presetControls();
+				}
+				if ( slOwner != null) slOwner.switchState();
+			}
+			
+			override public function get data():Object {
+				return _item;
+			}
+			
+			public function set type( t:int):void {
+				_fixType = t;
+				if ( _fixType >=0) {
+					selType.value = _item.type = _fixType;
+					hgTypes.includeInLayout = hgTypes.visible = false;
+					
+					typeChanged( null);
+				} else {
+					hgTypes.includeInLayout = hgTypes.visible = true;					
+				}
+			}
+			
+			public function set sort( s:int):void {
+				_fixSort = s;
+				if ( _fixSort >=0) {
+					selSort.sort = _item.sort = _fixSort;
+//					hgTypes.includeInLayout = hgTypes.visible = false;
+				} else {
+//					hgTypes.includeInLayout = hgTypes.visible = true;					
+				}
+			}
+			
+			protected function presetDependent():void {
+				if ( _itemTagMap == null)  _itemTagMap = new SignsTagMap();
+				_tagMap = _itemTagMap.list( new RetrievalParameters( { cache_item_id:_item.cache_id}));
+				
+				if ( _itemIconMap == null)  _itemIconMap = new SignsIconMap();
+				_iconMap = _itemIconMap.list( new RetrievalParameters( { cache_item_id:_item.cache_id}));
+			}
+			
+			protected function presetControls():void {
+				
+				if ( selType == null || _item == null) return;
+				
+				selType.value = _item.type;
+				selPos.value = _item.position;
+				selDir.value = _item.direction;
+				
+				selSort.sort = _item.sort;
+				
+				var type:String = _item.type.toString( 16);
+				
+				debug( "type ["+type+"]");
+				
+				dsLength.master = type;
+				dsLength.value = _item.size;
+				dsFormat.master = type;
+				dsFormat.value = _item.format;
+				dsConnection.master = type;
+				dsConnection.value = _item.connection;
+				
+				tiName.text = _item.name;
+				tiValue.text = _item.value;
+				taDescription.text = _item.description;
+
+				slOwner.owner_id = _item.owner_id;
+				slOwner.cache_owner_id = _item.cache_owner_id;
+//				slOwner.locationId = _item.location_id;
+				
+				slTags.item = _item;
+				
+//				slIcons.item = _item;
+//				selIcons.item = _item;
+				
+				iLarge.item = _item;
+				
+				iA1.item = _item;
+				iA2.item = _item;
+				iA3.item = _item;
+				iA4.item = _item;
+				
+				iB1.item = _item;
+				iB2.item = _item;
+
+				iArrow.item = _item;
+
+/*
+				iconSelector.item = _item;
+				iconSelector.value = _iconMap;
+*/				
+				var mode:String = selType.renderMode;
+				debug( "type ["+type+"] ["+mode+"]");
+				currentState = mode;
+				
+				validateForm();
+			}
+			
+			public function doDelete( evt:Event):void {
+			}
+			
+			public function doSave( evt:Event):void {
+				
+				_item.owner_id = slOwner.owner_id;
+				_item.cache_owner_id = slOwner.cache_owner_id;
+				_item.type = selType.value;	//parseInt( slType.selectedItem.@data.toString());
+
+				_item.sort = selSort.sort;
+
+				_item.direction = selDir.value;
+				_item.position = selPos.value;
+				_item.connection = dsConnection.value;
+				_item.size = dsLength.value;
+				_item.format = dsFormat.value;
+				
+				_item.name = tiName.text;
+				_item.value = tiValue.text;
+				_item.description = taDescription.text;
+				//					_data.location = lLocation.text;
+				
+//				var icons:ArrayCollection = iconSelector.value;
+				
+				debug( "save ["+_item.toString()+"]");
+				
+//				_item.callService( 'saveItem', itemSaved, faultHandler);
+
+				if ( AppSettings.online) {
+					_item.callService( 'save', itemSaved, faultHandler);
+				} else {
+					var chg:TopEvent;
+
+					if ( _item.state == SignsModel.STATE_NEW) chg = new TopEvent( TopEvent.ITEM_ADD);
+					else chg = new TopEvent( TopEvent.ITEM_SAVED);
+/*
+					if ( _item.id < 0 && _item.cache_id < 0) chg = new TopEvent( TopEvent.ITEM_ADD);
+					else chg = new TopEvent( TopEvent.ITEM_SAVED);
+*/
+					_item.cache_modified = new Date();
+
+					_item.save();
+					debug( "saved item ["+_item+"]");
+					
+					dispatchEvent( chg);
+				}
+			}
+			
+			public function validateForm( event:Event=null):void {
+				var valid:Boolean = true;	//( slOwner.cache_owner_id > 0);
+				
+				debug( "validate ["+valid+"]");
+				dispatchEvent( new TopEvent( valid ? TopEvent.VALIDATION_OK : TopEvent.VALIDATION_FAIL));
+			}
+			
+			protected function itemSaved( evt:ResultEvent, token:Object=null):void {
+				
+				var res:Array = evt.result as Array;
+				var status:StatusModel = new StatusModel( res[0]);
+				
+				var chg:TopEvent;
+				if ( _item.id < 0) {
+					_item.id = status.id;
+					
+					chg = new TopEvent( TopEvent.ITEM_ADD);
+				} else {
+					chg = new TopEvent( TopEvent.ITEM_SAVED);
+				}
+				_item.modified = status.modified;
+				
+				debug( "saved item ["+chg.type+"] "+status);
+				
+				dispatchEvent( chg);
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+
+				dispatchEvent( new TopEvent( TopEvent.ITEM_SAVE_ERROR));
+			}
+	
+			//===========================================================================================================
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+			
+			protected function typeChanged(event:Event):void {
+				// TODO Auto-generated method stub
+				
+				var type:String = selType.value.toString( 16);
+				var mode:String = selType.renderMode;
+				
+				debug( "type ["+type+"] ["+mode+"]");
+				
+				currentState = mode;
+				
+				dsLength.master = type;
+				dsFormat.master = type;
+				dsConnection.master = type;
+			}
+			
+			protected function button1_clickHandler(event:MouseEvent):void
+			{
+				// TODO Auto-generated method stub
+				
+			}
+			
+		]]>
+	</fx:Script>
+	<s:layout.default>
+		<s:BasicLayout/>
+	</s:layout.default>
+	<s:VGroup width="100%" height="100%" gap="2" 
+			  paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"
+			  minWidth.default="750">
+		<s:Spacer width="100%" height="5"/>
+		<s:HGroup id="hgTypes" width="100%">
+			<ns2:ItemSortSelect id="selSort"/>
+			<ns2:ItemTypeSelector id="selType" width="100%" change="typeChanged(event)"
+								  minWidth="750"/>
+		</s:HGroup>
+		<s:HGroup width="100%" verticalAlign="bottom"
+				  minWidth.default="750">
+			<ns2:DependentSelector id="dsConnection" width="30%" minWidth="100"
+								   data="{AppSettings.itemConnectionXML}"
+								   visible.info="false" includeInLayout.info="false"/>
+			<ns2:DependentSelector id="dsLength" width="30%" minWidth="100"
+								   data="{AppSettings.itemLengthXML}"
+								   visible.info="false" includeInLayout.info="false"
+								   visible.label="false" includeInLayout.label="false"
+								   visible.sign="false" includeInLayout.sign="false"
+								   visible.subsign="false" includeInLayout.subsign="false"/>
+			<ns2:DependentSelector id="dsFormat" width="30%" minWidth="100"
+								   data="{AppSettings.itemFormatXML}"
+								   visible.info="false" includeInLayout.info="false"
+								   visible.label="false" includeInLayout.label="false"/>
+			<ns2:PositionSelector id="selPos"
+								   height="100%"
+								   visible.info="false" includeInLayout.info="false"
+								   visible.label="false" includeInLayout.label="false"
+								   visible.post="false" includeInLayout.post="false"
+								   visible.subsign="false" includeInLayout.subsign="false"/>
+			<ns2:DirectionSelector id="selDir"
+								   height="100%"
+								   visible.info="false" includeInLayout.info="false"
+								   visible.label="false" includeInLayout.label="false"
+								   visible.post="false" includeInLayout.post="false"
+								   visible.subsign="false" includeInLayout.subsign="false"/>
+		</s:HGroup>
+		<s:HGroup width="100%"
+				  paddingLeft="2" paddingRight="2" verticalAlign="middle">
+			<ns1:IconDisplayTyped id="iLarge" width="120" height="120"
+								  linkType="{AppSettings.ICON_LINK_LARGE}"
+								  visible.label="false" includeInLayout.label="false"
+								  visible.post="false" includeInLayout.post="false"
+								  visible.info="false" includeInLayout.info="false"/>
+			<s:Group visible.post="false" includeInLayout.post="false"
+					 visible.subsign="false" includeInLayout.subsign="false"
+					 visible.info="false" includeInLayout.info="false">
+				<s:layout>
+					<s:TileLayout orientation="rows" requestedRowCount="2"
+								  horizontalGap="4" requestedColumnCount.default="2"
+								  verticalGap="4"/>
+				</s:layout>
+				<s:layout.label>
+					<s:HorizontalLayout/>
+				</s:layout.label>
+				<ns1:IconDisplayTyped id="iA1" width="60" height="60" linkType="{AppSettings.ICON_LINK_A1}"/>
+				<ns1:IconDisplayTyped id="iA2" width="60" height="60" linkType="{AppSettings.ICON_LINK_A2}"/>
+				<ns1:IconDisplayTyped id="iA3" width="60" height="60" linkType="{AppSettings.ICON_LINK_A3}"/>
+				<ns1:IconDisplayTyped id="iA4" width="60" height="60" linkType="{AppSettings.ICON_LINK_A4}"
+									  visible.label="false" includeInLayout.label="false"/>
+			</s:Group>
+			<s:VGroup width="100%" gap="0" paddingTop="4">
+				<s:Label text="Name:" text.label="Beschriftung:" styleName="inputLabel"/>
+				<s:TextInput id="tiName" width="100%"/>
+			</s:VGroup>
+			<s:HGroup visible.post="false" includeInLayout.post="false"
+					  visible.sign="false" includeInLayout.sign="false"
+					  visible.subsign="false" includeInLayout.subsign="false"
+					  visible.info="false" includeInLayout.info="false">
+				<ns1:IconDisplayTyped id="iB1" width="60" height="60" linkType="{AppSettings.ICON_LINK_B1}" filterType="{0x28}"/>
+				<ns1:IconDisplayTyped id="iB2" width="60" height="60" linkType="{AppSettings.ICON_LINK_B2}" filterType="{0x20}"/>				
+			</s:HGroup>
+			<s:VGroup width="40%" gap="0" paddingTop="4"
+					  visible.post="false" includeInLayout.post="false"
+					  visible.subsign="false" includeInLayout.subsign="false">
+				<s:Label text="Wert:" text.sign="Höhe üNN:" text.label="Entfernung:" styleName="inputLabel"/>
+				<s:TextInput id="tiValue" width="100%"/>
+			</s:VGroup>
+			<ns1:IconDisplayTyped id="iArrow" width="120" height="120"
+								  linkType="{AppSettings.ICON_LINK_ARROWTIP}" filterType="{0x40}"
+								  visible.label="false" includeInLayout.label="false"
+								  visible.post="false" includeInLayout.post="false"
+								  visible.subsign="false" includeInLayout.subsign="false"
+								  visible.info="false" includeInLayout.info="false"/>
+		</s:HGroup>
+		<s:VGroup width="100%" gap="0" paddingTop="4" height="100%">
+			<s:Label text="Beschreibung:" styleName="inputLabel"/>
+			<!-- ns1:ItemIconSelector3 id="iconSelector" height="120"
+								   visible.info="false" includeInLayout.info="false"
+								   visible.post="false" includeInLayout.post="false"/ -->
+			<s:TextArea id="taDescription" width="100%" height="100%" minHeight="60"/>
+		</s:VGroup>		
+		<s:HGroup width="100%">
+			<ns1:ItemOwnerSelect id="slOwner" width="100%"/>
+			<ns1:ItemTagsSelect id="slTags" width="100%"/>
+		</s:HGroup>
+		<!-- s:Spacer includeIn="info,label,post,sign,subsign" width="100%" height="5"/>
+		<ns1:ItemIconsSelect id="slIcons" width="100%"
+							 visible.info="false" includeInLayout.info="false"
+							 visible.post="false" includeInLayout.post="false"/ -->
+		<!-- ns1:IconsListDisplay id="selIcons" includeIn="info,label,post,sign,subsign" height="40"/ -->		
+	</s:VGroup>
+</s:View>

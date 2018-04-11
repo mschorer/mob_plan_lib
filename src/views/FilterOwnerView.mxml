@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		xmlns:components="de.ms_ite.mobile.topplan.components.*"
+		actionBarVisible="false" title="FilterTagView" xmlns:ns="de.ms_ite.mobile.topplan.selectors.*">
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			
+			override public function set data( dest:Object):void {
+				super.data = dest;
+			}
+
+			protected function toggleOwner(event:Event):void {
+				ioSelect.enabled = cbOwner.selected;
+			}
+			
+		]]>
+	</fx:Script>
+	<s:Label text="Owner"/>
+	<s:HGroup width="100%">
+		<s:CheckBox id="cbOwner" label="" change="toggleOwner(event)"/>
+		<ns:ItemAgsSelect id="ioSelect" height="150"/>
+	</s:HGroup>
+</s:View>

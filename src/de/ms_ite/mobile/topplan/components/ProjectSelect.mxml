@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:HGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+						xmlns:s="library://ns.adobe.com/flex/spark"
+						creationComplete="initUI(event)" 
+						minWidth="300">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.callouts.ProjectSelectCallout;
+			
+			import models.SignsProject;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.events.ListEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+			import spark.events.PopUpEvent;
+
+			protected var pSelect:ProjectSelectCallout;
+//			protected var _cache_id:int;
+			protected var _currentProject:SignsProject;
+			
+//			protected var _options:ArrayCollection = new ArrayCollection();
+			
+			protected var _defChromeColor:int;
+			
+			protected function initUI(event:Event):void {
+				_defChromeColor = cbProject.getStyle( 'chromeColor');
+				
+				presetControl();
+			}
+			
+			public function chooseProject( evt:Event=null):void {
+				
+				if ( pSelect == null) {
+					pSelect = new ProjectSelectCallout();
+					pSelect.addEventListener( Event.CLOSE, handleClose);
+					pSelect.verticalPosition = 'after';
+				}
+				
+				pSelect.project = _currentProject;
+				
+				if ( !pSelect.isOpen) pSelect.open( cbProject, true);
+				
+				debug( "choose project ...");
+			}
+			
+			public function get project():SignsProject {
+				return _currentProject;
+			}
+			
+			public function set project( val:SignsProject):void {
+				pSelect.project = val;
+			}
+			
+			protected function handleClose(event:PopUpEvent):void {
+				if ( ! event.commit) return;
+				
+				_currentProject = pSelect.project;
+				
+				presetControl();
+			}
+			
+			protected function presetControl():void {
+				if ( AppSettings.currentProject == null) {
+					cbProject.setStyle( 'chromeColor', 0xFFC231);		
+					cbProject.label = "Projekt wählen ...";
+				} else {
+					cbProject.setStyle( 'chromeColor', _defChromeColor);
+					cbProject.label = "Projekt: "+AppSettings.currentProject.name;
+				}
+			}
+
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}						
+		]]>
+	</fx:Script>
+	<!-- s:Label text="Project:"/ -->
+	<s:Button id="cbProject" width="100%" label="Projekt ..." click="chooseProject( event)"/>
+</s:HGroup>

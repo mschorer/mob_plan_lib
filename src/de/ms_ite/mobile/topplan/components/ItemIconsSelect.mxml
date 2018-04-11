@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+						xmlns:s="library://ns.adobe.com/flex/spark"
+						currentState="online" show="activate(event)">
+	<s:states>
+		<s:State name="online"/>
+		<s:State name="offline"/>
+	</s:states>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.popups.IconPopup;
+			import de.ms_ite.mobile.topplan.popups.IconPopupSingle;
+			
+			import models.SignsIcon;
+			import models.SignsIconMap;
+			import models.SignsItem;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.core.UIComponent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+									
+			protected var _item:SignsItem;
+			
+			protected var iconPopup:IconPopup;
+						
+			public function get item():SignsItem {
+				return _item;
+			}
+			
+			public function set item( i:SignsItem):void {
+				_item = i;
+			}
+/*			
+			protected function setIcon( trg:Object, linkType:int, filt:int):void {
+				_destButton = Button( trg);
+				triggerEdit( linkType, filt);
+			}
+*/			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			protected function activate(event:Event):void {
+				switchState();
+			}
+			
+			public function switchState():void {
+				currentState = AppSettings.online ? 'online' : 'offline';
+				debug( "mode: "+currentState);
+			}
+			
+			protected function iconSelectOpen(event:MouseEvent):void {
+				triggerEdit();
+			}
+			
+			protected function triggerEdit( type:int=-1, filt:int=-1):void {
+				if ( iconPopup == null) {
+					iconPopup = new IconPopup();
+					
+					iconPopup.addEventListener( Event.COMPLETE, iconSelect);					
+				}
+				iconPopup.item = _item;
+				
+				if ( !iconPopup.isOpen) iconPopup.open( DisplayObjectContainer( this.parentApplication), true);
+				PopUpManager.centerPopUp( iconPopup);
+
+//				iconPopup.preset( _item);				
+			}
+			
+			protected function iconSelect(event:Event):void {
+				// TODO Auto-generated method stub
+				debug( "icons saved");
+//				_destButton.iconDisplay;
+			}
+
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}						
+		]]>
+	</fx:Script>
+	<s:Button id="bSelect" width="100%" label="Select icon ..." click="iconSelectOpen( event)"/>
+</s:VGroup>

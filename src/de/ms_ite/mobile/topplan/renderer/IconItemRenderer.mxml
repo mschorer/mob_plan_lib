@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:IconItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+					xmlns:s="library://ns.adobe.com/flex/spark"
+					width="100%"
+					messageStyleName="msgStyle"
+					labelField="label"
+					messageField="data"
+					iconFunction="iconFunc"
+					labelFunction="labelFunc"
+					messageFunction="msgFunc">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:DateTimeFormatter id="dFmt" dateTimePattern="dd. MMMM yyyy HH:mm:ss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import flash.filesystem.File;
+			
+			import models.SignsIcon;
+			
+			protected function iconFunc( item:Object):Object {
+				
+				var ic:SignsIcon = item as SignsIcon;
+				
+				return ic.cache_preview_url; 
+			}
+			
+			protected function labelFunc( item:Object):Object {
+				return ( item.cache_preview_url != null) ? null : item.name;
+			}
+			
+			protected function msgFunc( item:Object):Object {
+				return null;
+			}
+		]]>
+	</fx:Script>
+</s:IconItemRenderer>

@@ -1,0 +1,2020 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:ns="de.ms_ite.mobile.topplan.components.*"
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		contentCreationComplete="initUI( event);" title="Sync">
+	<!--  viewActivate="activateSync(event)" -->
+	<s:layout>
+		<s:VerticalLayout paddingBottom="4" paddingLeft="4" paddingRight="4" paddingTop="4"/>
+	</s:layout>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.renderer.InterfaceRenderer;
+			import de.ms_ite.mobile.topplan.tools.IdLookup;
+			
+			import flash.data.SQLResult;
+			import flash.desktop.NativeApplication;
+			import flash.filesystem.File;
+			import flash.filesystem.FileMode;
+			import flash.filesystem.FileStream;
+			
+			import flashx.textLayout.tlf_internal;
+			
+			import models.Model;
+			import models.RetrievalParameters;
+			import models.SignsAction;
+			import models.SignsContentModel;
+			import models.SignsIcon;
+			import models.SignsIconMap;
+			import models.SignsItem;
+			import models.SignsLocation;
+			import models.SignsModel;
+			import models.SignsOwner;
+			import models.SignsProject;
+			import models.SignsTag;
+			import models.SignsTagMap;
+			import models.SignsUser;
+			import models.StatusModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.rpc.remoting.RemoteObject;
+			
+			import spark.components.SplitViewNavigator;
+			import spark.events.IndexChangeEvent;
+			import spark.events.ViewNavigatorEvent;
+
+			protected static var PAGESIZE_DOWN:int			= 100;
+			protected static var PAGESIZE_DOWN_SMALL:int	= 250;
+			protected static var PAGESIZE_PASS2:int			= 50;
+			
+			public static var IMGDL_NEVER:int = -1;
+			public static var IMGDL_OPTIM:int = 0;
+			public static var IMGDL_ALWAYS:int = 1;
+			
+			public static var IMGDL_LABELS:Array = [ 'Nie', 'Optimiert', 'Immer'];
+			
+			protected var upldFileDb:File;
+			protected var fileStreamDb:FileStream;
+			
+			protected var goBackToAsync:Boolean = false;
+			
+			protected var userModel:SignsUser;
+			protected var locationModel:SignsLocation;
+			protected var itemModel:SignsItem;
+			protected var actionModel:SignsAction;
+			protected var iconModel:SignsIcon;
+			protected var iconMapModel:SignsIconMap;
+			protected var tagModel:SignsTag;
+			protected var tagMapModel:SignsTagMap;
+			protected var projectModel:SignsProject;
+			protected var ownerModel:SignsOwner;
+
+			protected var visibleLocationList:ArrayCollection;
+
+			protected var usrCache:Dictionary;
+			protected var itemReparentList:Array;
+			protected var tagReparentList:Array;
+			
+			protected var actionBlockSize:int;
+			protected var actionQueue:ArrayCollection;
+			
+			protected var iconBlockSize:int;
+			protected var iconQueue:ArrayCollection;
+
+			protected var asyncOpsQueue:Array;
+			protected var asyncOpsModel:SignsModel;
+			
+			protected var totalUpSyncs:int = -1;
+			
+			protected var doRunSync:Boolean = false;
+			protected var doSyncStats:Boolean = false;
+			protected var busyLevel:int = 0;
+			
+			protected var idCache:IdLookup;
+			
+			protected var fileStream:FileStream;
+			
+			protected var acInterfaces:ArrayCollection;
+			
+			protected var syncStatusQueue:ArrayCollection;
+
+			protected var syncQueue:ArrayCollection;
+			
+			protected var syncItem:SignsModel;
+			protected var syncItemStatus:SyncStatus;
+			
+			protected var imageDownloadMode:int = IMGDL_OPTIM;
+			protected var forceRebuild:Boolean = false;			
+			
+			protected var rebuildEnTimer:Timer;
+
+			protected var workStarted:Number;
+			protected var workAvg:Number;
+			
+			protected var serviceStart:Number;
+			protected var serviceAvg:Number;
+
+			protected var upDBrequest:URLRequest; 
+
+			//----------------------------------------------------------------------------------------------
+			
+			protected function initUI( event:FlexEvent):void {
+				debug( "init.");
+//				detectConnectivity();
+				
+				changeDownloadOpt( null);
+				changeRebuildOpt( null);
+				
+				userModel = new SignsUser();
+				locationModel = new SignsLocation();
+				itemModel  = new SignsItem();
+				actionModel = new SignsAction();
+				iconModel = new SignsIcon();
+				iconMapModel = new SignsIconMap();
+				tagModel = new SignsTag();
+				tagMapModel = new SignsTagMap();
+				projectModel = new SignsProject();
+				ownerModel = new SignsOwner();
+				
+				idCache = new IdLookup();
+
+				callLater( syncUpStats);
+			}
+/*			
+			private function detectConnectivity( evt:Event=null):void {
+				
+				if ( acInterfaces == null) {
+					acInterfaces = new ArrayCollection();
+					
+					lInterfaces.dataProvider = acInterfaces;
+				}
+				
+				acInterfaces.removeAll();
+				
+				var interfaces:Vector.<NetworkInterface> = NetworkInfo.networkInfo.findInterfaces();
+				
+				var addInterface:Function = function( ifc:NetworkInterface, index:int, vector:Vector.<NetworkInterface>):void {
+					acInterfaces.addItem( ifc);
+//					debug( "  if: ["+(ifc.active ? '+' : '-')+"] "+ifc.displayName+" / "+(( ifc.addresses.length > 0) ? ifc.addresses[0].address : '---'));
+				};				
+				
+				interfaces.forEach( addInterface, this);
+			}			
+*/			
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				
+//				debug( "set data ["+dest+"]");
+				
+				if ( dest != null) {
+					if ( dest is ArrayCollection) visibleLocationList = dest as ArrayCollection;
+//					syncUpStats();
+				}				
+
+				syncUpStats();
+			}
+			
+			override public function get data():Object {
+				return visibleLocationList;
+			}
+
+			public function doSync( evt:Event):void {
+				debug( "do sync.");
+				busyLevel++;
+				cbDebug.enabled = bSync.enabled = (busyLevel == 0);
+
+				syncUpStats();
+
+				if ( Model.asyncMode) {
+					debug( "wait ...");
+					doRunSync = true;
+				} else {
+					goSync();
+				}
+			}
+			
+			protected function goSync():void {
+				debug( "run sync.");
+				
+				if ( Model.asyncMode) {
+					goBackToAsync = true;
+					
+					debug( "async mode detected ...");
+					debug( "switching to SYNCHRONOUS MODE -----------------------------");
+
+					var resp:flash.net.Responder = new flash.net.Responder( dbClosedAsync, closeDbError);
+					Model.closeLocalDB( resp);
+				} else {
+					debug( "sync mode detected ...");
+					syncUp();
+				}
+			}
+						
+			protected function closeDbError( err:SQLError):void {
+				
+				callLater( doSyncSync);
+			}
+			
+			protected function dbClosedAsync( event:SQLEvent):void {
+				debug( "db closed async. sync synchronous ...");
+				
+				doSyncSync();
+			}
+			
+			protected function doSyncSync():void {
+				debug( "reopening synchronously ...");
+					
+				Model.asyncMode = false;
+				Model.initLocalDB();		
+				
+				syncUp();
+			}
+			
+			protected function upSyncDone():void {
+				dispatchEvent( new TopEvent( TopEvent.SYNC_UP_COMPLETE, true));
+				
+				syncDown();
+			}
+			
+			protected function downSyncDone():void {
+				if ( goBackToAsync) {
+					goBackToAsync = false;
+					
+					debug( "switching to ASYNCHRONOUS MODE -----------------------------");
+					Model.closeLocalDB();
+					debug( "closed synchronous mode");
+
+					Model.asyncMode = true;
+					var resp:flash.net.Responder = new flash.net.Responder( dbReopenAsyncDone, dbReopenAsyncDone);
+					Model.initLocalDB( resp);
+
+					debug( "reopening asynchronously ...");
+				} else downSyncDoneComplete();
+			}
+			
+			protected function dbReopenAsyncDone( event:Object):void {
+				debug( "db init async done ["+event.toString()+"]");
+				callLater( downSyncDoneComplete);
+			}
+			
+			protected function downSyncDoneComplete():void {
+				debug( "sync completed.");
+
+				AppSettings.invalidateCaches();
+				AppSettings.prepareSettings();				
+				lSyncStatus.text = "Idle.";
+
+				busyLevel = 0;
+				cbDebug.enabled = bSync.enabled = (busyLevel == 0);
+				
+				dispatchEvent( new TopEvent( TopEvent.SYNC_DOWN_COMPLETE, true));
+			}
+			
+			//----------------------------------------------------------------------------------------------
+			
+			public function syncUp():void {
+//				var total:int = syncUpStats();
+				
+				debug( "start up sync #"+totalUpSyncs+" object types.");
+
+				if ( true || totalUpSyncs > 0) {
+					syncStatusQueue = new ArrayCollection();
+					
+					syncStatusQueue.addItem( sUsers);
+					syncStatusQueue.addItem( sOwners);
+					syncStatusQueue.addItem( sProjects);
+					syncStatusQueue.addItem( sLocations);
+					syncStatusQueue.addItem( sItems);
+					syncStatusQueue.addItem( sActions);
+					syncStatusQueue.addItem( sIcons);
+					syncStatusQueue.addItem( sIconMap);
+					syncStatusQueue.addItem( sTags);
+					syncStatusQueue.addItem( sTagMap);
+					
+					debug( "start up sync #"+syncStatusQueue.length+" object types.");
+					
+					triggerSyncRemote();
+					
+					lSyncStatus.text = "Syncing to server.";
+				} else {
+					upSyncDone();
+				}
+			}
+			
+			protected function triggerSyncRemote():void {
+				if ( syncItemStatus != null) {
+					syncItemStatus.status = SyncStatus.STATUS_DONE;
+				}
+
+				if ( syncStatusQueue.length == 0) {
+					debug( "sync up done.");
+					
+					upSyncDone();
+				} else {
+					syncItemStatus = syncStatusQueue.removeItemAt( 0) as SyncStatus;
+					var syncObjectClass:SignsModel = syncItemStatus.model;
+					
+					syncQueue = syncObjectClass.list( new RetrievalParameters( { 'cache_modified > modified':null, 'modified is null':null}, false));
+					debug( "  syncing #"+syncQueue.length+" ["+syncObjectClass.tableName+"]");
+
+					syncItemStatus.status = SyncStatus.STATUS_SYNCING;		
+
+					if ( syncObjectClass is SignsAction) {
+						syncItemStatus.total = syncQueue.length;
+						syncItemStatus.action = 'Uploading ...';
+					}
+
+					callLater( syncRemote);
+				}
+			}
+			
+			protected function syncRemote():void {
+				var inProgress:Boolean = false;
+
+//				syncItemStatus.count = syncQueue.length;
+				syncItemStatus.upCount = syncQueue.length;
+				
+				if ( syncQueue.length == 0) {
+					
+					debug( "  queue empty. next ...");
+					callLater( triggerSyncRemote);
+				} else {
+					syncItem = syncQueue.removeItemAt( 0) as SignsModel;
+					
+					if ( syncItem is SignsAction) {
+						var sa:SignsAction = syncItem as SignsAction;
+						
+						if ( sa.id < 0) {
+							if ( sa.user_id < 0) sa.user_id = idCache.cacheToGlobal( userModel, sa.cache_user_id); 
+							if ( sa.project_id < 0) sa.project_id = idCache.cacheToGlobal( projectModel, sa.cache_project_id); 
+							if ( sa.item_id < 0) sa.item_id = idCache.cacheToGlobal( itemModel, sa.cache_item_id);
+						}
+
+						if ( sa.cache_url != null && sa.url == null) {
+							
+							var imgFile:File = new File( sa.cache_url);
+							
+							if ( imgFile.exists && ! imgFile.isDirectory) {
+								sa.addEventListener( ProgressEvent.PROGRESS, onUploadProgress);
+								sa.addEventListener( TopEvent.UPLOAD_COMPLETE, onUploadComplete);
+								
+								sa.url = syncItem.uploadFile( AppSettings.uploadScriptUrl, AppSettings.imageRootPath, AppSettings.imageOffsetPath, imgFile);
+								
+								inProgress = true;
+								/** fixme return here, skip SignsAction handling further down */
+							}
+						}
+					}
+					
+					if ( ! inProgress) {
+						if ( syncItem is SignsItem) {
+							var si:SignsItem = syncItem as SignsItem;
+							
+							if ( si.id < 0) {
+								if ( si.location_id < 0) si.location_id = idCache.cacheToGlobal( locationModel, si.cache_location_id); 
+								if ( si.owner_id < 0) si.owner_id = idCache.cacheToGlobal( ownerModel, si.cache_owner_id); 
+								if ( si.parent_id < 0) si.parent_id = idCache.cacheToGlobal( itemModel, si.cache_parent_id);
+							}
+						}
+						/** fixme: remove this. */
+						/*
+						if ( syncItem is SignsAction) {
+							var sact:SignsAction = syncItem as SignsAction;
+							
+							if ( sact.id < 0) {
+								if ( sact.user_id < 0) sact.user_id = idCache.cacheToGlobal( userModel, sact.cache_user_id); 
+								if ( sact.project_id < 0) sact.project_id = idCache.cacheToGlobal( projectModel, sact.cache_project_id); 
+								if ( sact.item_id < 0) sact.item_id = idCache.cacheToGlobal( itemModel, sact.cache_item_id);
+							}
+						}
+						*/
+						/** until here */
+						if ( syncItem is SignsTag) {
+							var stag:SignsTag = syncItem as SignsTag;
+							
+							if ( stag.id < 0) {
+								if ( stag.parent_id < 0) stag.parent_id = idCache.cacheToGlobal( tagModel, stag.cache_parent_id); 
+							}
+						}
+						if ( syncItem is SignsIconMap) {
+							var sim:SignsIconMap = syncItem as SignsIconMap;
+
+							if ( sim.id < 0) {
+								if ( sim.item_id < 0) sim.item_id = idCache.cacheToGlobal( itemModel, sim.cache_item_id); 
+								if ( sim.icon_id < 0) sim.icon_id = idCache.cacheToGlobal( iconModel, sim.cache_icon_id); 
+							}
+							/*
+							if ( sim.cache_icon_id < 0) {
+								sim.del();
+								
+								if ( sim.state == SignsModel.STATE_SYNCED) {
+									syncItem.callService( 'delete', syncRemoteSaved, faultHandler);
+									return;
+								}
+							}
+							*/
+						}
+						if ( syncItem is SignsTagMap) {
+							var stm:SignsTagMap = syncItem as SignsTagMap;
+							
+							if ( stm.id < 0) {
+								if ( stm.item_id < 0) stm.item_id = idCache.cacheToGlobal( itemModel, stm.cache_item_id); 
+								if ( stm.tag_id < 0) stm.tag_id = idCache.cacheToGlobal( tagModel, stm.cache_tag_id); 
+							}
+							/*
+							if ( stm.cache_tag_id < 0) {
+								stm.del();
+								
+								if ( stm.state == SignsModel.STATE_SYNCED) {
+									syncItem.callService( 'delete', syncRemoteSaved, faultHandler);
+									return;
+								}
+							}
+							*/
+						}
+						
+						if ( syncItem.validate()) {
+							syncItem.callService( 'sync', syncRemoteSaved, faultHandler);
+						} else {
+							debug( "VALIDATION ERROR: "+syncItem.toString());
+							syncItemStatus.upCount++;
+							callLater( syncRemote);
+						}
+					}
+
+//					debug( "    sync: "+syncItem);
+				}
+			}
+			
+			private function onUploadProgress(event:ProgressEvent):void {
+				var pro:int = Math.round((Number(event.bytesLoaded) / Number(event.bytesTotal)) * 100);
+				debug( "    upload: "+pro+"%");
+
+				syncItemStatus.done = event.bytesLoaded;
+				syncItemStatus.total = event.bytesTotal;
+			}
+			
+			// Called on upload complete
+			private function onUploadComplete( event:TopEvent):void {
+				var sa:SignsAction = event.target as SignsAction;
+				sa.removeEventListener( ProgressEvent.PROGRESS, onUploadProgress);
+				sa.removeEventListener( TopEvent.UPLOAD_COMPLETE, downloadActionDone);
+
+				var uploadErrorMsg:String = null;
+				var rcXml:XMLList = event.uploadResult.file;
+				
+				if ( event.type == TopEvent.UPLOAD_COMPLETE && rcXml != null && rcXml.length() > 0) {
+					
+					var rcFile:XML = rcXml[0];
+					var local:String = rcFile.@client;
+					var remote:String = rcFile.@server;
+					
+					if ( rcFile.@status == "ok") {
+						if ( local != remote) {
+							sa.url = AppSettings.imageOffsetPath+"/"+remote;
+						}
+					} else {
+						sa.url = null;
+						debug( "upload error ["+rcFile.@msg+"]");
+						uploadErrorMsg = "upload error ["+rcFile.@msg+"]";
+					}
+				}
+				
+				if ( uploadErrorMsg != null) {
+					taFaults.text += "error uploading ["+sa.cache_url+"] to ["+sa.url+"]\nmsg["+event.uploadResult.toString()+"]";
+					debugOn = true;
+				}
+
+				debug( "upload done. syncing entry ...");
+
+				if ( syncItem.validate()) {
+					syncItem.callService( 'sync', syncRemoteSaved, faultHandler);
+				} else {
+					debug( "VALIDATION ERROR: "+syncItem.toString());
+					syncItemStatus.upCount++;
+					callLater( syncRemote);
+				}
+			}
+			
+			protected function syncRemoteSaved( evt:ResultEvent, token:Object=null):void {
+				
+				var res:StatusModel = new StatusModel( evt.result[0]);
+				
+				if ( res.action == null) {
+//					debug( "  sync skipped for ["+syncItem.id+"]");
+
+//					syncItem.callService( 'loadById', syncRemoteNewer, faultHandler);					
+					syncRemote();
+				} else {
+					if ( syncItem.id < 0) {
+						syncItem.id = res.id;
+						
+						syncItem.forceUpdate = true;
+
+						// update caches
+						debug( "sync setting global id [ "+syncItem.id+" for "+syncItem.cache_id+" ]");				
+						idCache.cache( syncItem);
+					} else {
+						debug( "sync keeping global id [ "+syncItem.id+" for "+syncItem.cache_id+" ]");
+					}
+					
+					syncItem.modified = res.modified;
+					
+					if ( syncItem is SignsContentModel) {
+						var sco:SignsContentModel = syncItem as SignsContentModel;
+						if ( sco.created == null) sco.created = res.modified;
+					}
+					
+					syncItem.save();
+					syncItem.forceUpdate = false;
+					
+					syncRemote();
+				}
+			}
+/*			
+			protected function syncRemoteNewer( evt:ResultEvent, token:Object=null):void {
+				
+				var res:SignsModel = evt.result[0] as SignsModel;
+
+				debug( "saving updated "+res.toString());
+				
+				if ( res is SignsItem) saveItem( res as SignsItem);
+				if ( res is SignsLocation) saveContent( res as SignsLocation);
+				
+				syncRemote();
+			}
+*/			
+			//===============================================================================================
+			
+			protected function syncUpStats():void {
+				if ( doSyncStats) {
+					debug( "skip sync set up");
+					return;
+				}
+				else {
+					debug( "determining unsynced changes ...");
+				}
+				
+				if ( sUsers == null) return;
+				
+				doSyncStats = true;
+				busyLevel++;
+				cbDebug.enabled = bSync.enabled = (busyLevel == 0);
+
+				sUsers.indetermined = '-';
+				sLocations.indetermined = '-';
+				sOwners.indetermined = '-';
+				sProjects.indetermined = '-';
+				sItems.indetermined = '-';
+				sActions.indetermined = '-';
+				sTags.indetermined = '-';
+				sTagMap.indetermined = '-';
+				sIcons.indetermined = '-';
+				sIconMap.indetermined = '-';
+				
+				lSyncStatus.text = "determining unsynced changes ..."
+				biSyncStatus.visible = true;
+				
+				getTimestamps();
+			}
+			
+			protected function getTimestamps():void {
+				asyncOpsQueue = new Array( 
+					userModel, 
+					locationModel, 
+					ownerModel, 
+					projectModel, 
+					itemModel, 
+					actionModel, 
+					tagModel, 
+					tagMapModel, 
+					iconModel, 
+					iconMapModel );
+				
+				timestampNext();
+			}
+			
+			protected function timestampNext():void {
+				if ( asyncOpsQueue.length > 0) {
+					timestampChanges( asyncOpsQueue[0]);
+				} else {									
+					debug( "timestamps done ...");
+					getUpsyncCount();
+				}
+			}
+			
+			protected function timestampChanges( obj:SignsModel):void {
+				
+				if ( Model.asyncMode) {
+					var resp:flash.net.Responder = new flash.net.Responder( itemTimestampAsync, obj.defaultSqlErrorResponder);
+					obj.getMaxModified( null, resp);
+				} else {
+					var mdl:SignsModel = asyncOpsQueue.shift() as SignsModel;					
+					var rc:Date = mdl.getMaxModified();
+					updateTimestampStats( obj, rc);
+					
+					timestampNext();
+				}
+			}
+			
+			protected function itemTimestampAsync( sqe:SQLResult):void {
+				if ( asyncOpsQueue.length > 0) {
+					var mdl:SignsModel = asyncOpsQueue.shift() as SignsModel;
+					
+					var c:Date = mdl.getMaxModifiedResult( sqe);
+					
+					updateTimestampStats( mdl, c);
+				}
+				
+				timestampNext();
+			}
+			
+			protected function updateTimestampStats( obj:SignsModel, mod:Date):void {
+				debug( "  last change on server ["+obj.tableName+"]:\t @ "+mod);
+				if ( obj is SignsUser) {
+					sUsers.modified = mod;
+					sUsers.indetermined = '*';
+				}
+				if ( obj is SignsLocation) {
+					sLocations.modified = mod;
+					sLocations.indetermined = '*';
+				}
+				if ( obj is SignsOwner) {
+					sOwners.modified = mod;
+					sOwners.indetermined = '*';
+				}
+				if ( obj is SignsProject) {
+					sProjects.modified = mod;
+					sProjects.indetermined = '*';
+				}
+				if ( obj is SignsItem) {
+					sItems.modified = mod;
+					sItems.indetermined = '*';
+				}
+				if ( obj is SignsAction) {
+					sActions.modified = mod;
+					sActions.indetermined = '*';
+				}
+				if ( obj is SignsTag) {
+					sTags.modified = mod;
+					sTags.indetermined = '*';
+				}
+				if ( obj is SignsTagMap) {
+					sTagMap.modified = mod;
+					sTagMap.indetermined = '*';
+				}
+				if ( obj is SignsIcon) {
+					sIcons.modified = mod;
+					sIcons.indetermined = '*';
+				}
+				if ( obj is SignsIconMap) {
+					sIconMap.modified = mod;
+					sIconMap.indetermined = '*';
+				}
+			}
+			
+			protected function getUpsyncCount():void {
+				totalUpSyncs = 0;
+				
+				asyncOpsQueue = new Array( userModel, 
+					locationModel, 
+					ownerModel, 
+					projectModel, 
+					itemModel, 
+					actionModel, 
+					tagModel, 
+					tagMapModel, 
+					iconModel, 
+					iconMapModel );
+				
+				countNext();
+			}
+			
+			protected function countNext():void {
+				if ( asyncOpsQueue.length > 0) {
+					countChanges( asyncOpsQueue[0]);
+				} else {		
+					biSyncStatus.visible = false;
+					doSyncStats = false;
+					
+					busyLevel--;
+					cbDebug.enabled = bSync.enabled = (busyLevel == 0);
+
+					setSyncControls();
+				}
+			}
+			
+			protected function countChanges( obj:SignsModel):void {
+				
+				var dbparms:RetrievalParameters = new RetrievalParameters( { 'cache_modified > modified':null, 'modified is null':null}, false);
+				
+				if ( Model.asyncMode) {
+					var resp:flash.net.Responder = new flash.net.Responder( itemCountAsync, obj.defaultSqlErrorResponder);
+					obj.count( dbparms, resp);
+				} else {
+					var mdl:SignsModel = asyncOpsQueue.shift() as SignsModel;
+					var rc:int = mdl.count( dbparms);
+					updateUpStats( obj, rc);
+					
+					countNext();
+				}
+			}
+			
+			protected function itemCountAsync( sqe:SQLResult):void {
+				if ( asyncOpsQueue.length > 0) {
+					var mdl:SignsModel = asyncOpsQueue.shift() as SignsModel;
+					
+					var c:int = mdl.countResult( sqe);
+					totalUpSyncs += c;
+					
+					updateUpStats( mdl, c);
+				}
+				
+				countNext();
+			}
+			
+			protected function updateUpStats( obj:SignsModel, cnt:int):void {
+				debug( "  local changes ["+obj.tableName+"]:\t#"+cnt);
+				if ( obj is SignsUser) sUsers.upCount = cnt;
+				if ( obj is SignsLocation) sLocations.upCount = cnt;
+				if ( obj is SignsOwner) sOwners.upCount = cnt;
+				if ( obj is SignsProject) sProjects.upCount = cnt;
+				if ( obj is SignsItem) sItems.upCount = cnt;
+				if ( obj is SignsAction) sActions.upCount = cnt;
+				if ( obj is SignsTag) sTags.upCount = cnt;
+				if ( obj is SignsTagMap) sTagMap.upCount = cnt;
+				if ( obj is SignsIcon) sIcons.upCount = cnt;
+				if ( obj is SignsIconMap) sIconMap.upCount = cnt;
+			}
+			
+			protected function setSyncControls():int {
+				var total:int = sUsers.upCount + sLocations.upCount + sOwners.upCount + sProjects.upCount + sItems.upCount + sActions.upCount + sTags.upCount + sIcons.upCount + sTagMap.upCount + sIconMap.upCount;
+				debug( "a total of #"+total+" uncommitted changes.");
+				
+				lSyncStatus.text = ( total == 0) ? 'Idle.' : ('#'+total+" uncomitted changes.");
+				
+				if ( doRunSync) {
+					doRunSync = false;
+					debug( "execing delayed sync ...");
+					
+					goSync();
+				}
+				
+				return total;
+			}
+			
+			//===============================================================================================
+			
+			public function syncDown():void {
+				debug( "start Sync down");
+				
+				lSyncStatus.text = "Syncing to device.";
+
+				AppSettings.invalidateCaches();
+				idCache.clear();
+
+				sUsers.status = SyncStatus.STATUS_IDLE;
+				sLocations.status = SyncStatus.STATUS_IDLE;
+				sOwners.status = SyncStatus.STATUS_IDLE;
+				sProjects.status = SyncStatus.STATUS_IDLE;
+				sItems.status = SyncStatus.STATUS_IDLE;
+				sActions.status = SyncStatus.STATUS_IDLE;
+				sTags.status = SyncStatus.STATUS_IDLE;
+				sTagMap.status = SyncStatus.STATUS_IDLE;
+				sIcons.status = SyncStatus.STATUS_IDLE;
+				sIconMap.status = SyncStatus.STATUS_IDLE;
+				
+				pdUsers();
+			}
+			
+			protected function pdUsers():void {
+				if ( userModel == null) userModel = new SignsUser();
+				
+				if ( forceRebuild) {
+					userModel.clear();
+					userModel.modified = null;
+					usrCache = new Dictionary();
+				} else {
+					userModel.modified = sUsers.modified;
+					if ( usrCache == null) usrCache = new Dictionary();
+				}
+
+				sUsers.status = SyncStatus.STATUS_LOADING;
+				
+				debug( "users ["+userModel.modified+"]");
+				userModel.callService( 'list', pdResUsers, faultHandler);
+			}
+			
+			protected function pdResUsers( evt:ResultEvent, token:Object=null):void {
+				var ures:ArrayCollection = new ArrayCollection( evt.result as Array);
+				
+				debug( "users #["+ures.length+"]");
+				sUsers.downCount = ures.length;
+				
+				if ( ures.length > 0) {	
+					for( var j:int = 0; j < ures.length; j++) {
+						var tu:SignsUser = ures[ j] as SignsUser;
+						saveContent( tu);
+						
+						usrCache[ tu.id] = tu;
+						idCache.cache( tu);
+						
+//						debug( "  down: "+tu.toString());
+					}
+	
+					AppSettings.userMap = userModel.list();
+				}
+				debug( "done.");
+				
+				var currentUser:SignsUser = AppSettings.getUser();
+				var remappedUser:SignsUser = AppSettings.getUserById( currentUser.id);
+				debug( "remap user: "+currentUser+" to "+remappedUser);
+				AppSettings.setUser( remappedUser);
+				
+				sUsers.status = SyncStatus.STATUS_DONE;
+				
+				pdOwners();
+			}
+			
+			protected function pdOwners():void {
+				if ( ownerModel == null) ownerModel = new SignsOwner();
+				
+				if ( forceRebuild) {
+					ownerModel.clear();
+					ownerModel.modified = null;
+				} else {
+					ownerModel.modified = sOwners.modified;
+				}
+				
+				sOwners.status = SyncStatus.STATUS_LOADING;
+				
+				ownerModel.pageOffsetRemote = 0;
+				ownerModel.pageSizeRemote = PAGESIZE_DOWN;				
+				
+				debug( "owners ["+ownerModel.modified+"]");
+				ownerModel.callService( 'list', pdResOwners, faultHandler);
+			}
+			
+			protected function pdResOwners( evt:ResultEvent, token:Object=null):void {
+				var ores:ArrayCollection = new ArrayCollection( evt.result as Array);
+				
+//				debug( "  - owners #["+ores.length+"/"+ownerModel.pageOffsetRemote+"]");
+				
+				for( var j:int = 0; j < ores.length; j++) {
+					var so:SignsOwner = ores[ j] as SignsOwner;
+					saveContent( so);
+					
+					idCache.cache( so);
+					
+//					debug( "  down: "+so.toString());
+				}
+				
+//				debug( "  - done.");
+				
+				ownerModel.pageOffsetRemote += ores.length;
+				sOwners.downCount = ownerModel.pageOffsetRemote;
+				
+				if ( ores.length == ownerModel.pageSizeRemote) {
+					
+					ownerModel.callService( 'list', pdResOwners, faultHandler);
+//					debug( "next ...");
+				} else {
+					sOwners.status = SyncStatus.STATUS_DONE;
+					
+					debug( "done.");
+					pdProjects();
+				}
+			}
+			
+			protected function pdProjects():void {
+				if ( projectModel == null) projectModel = new SignsProject();
+				
+				if ( forceRebuild) {
+					projectModel.clear();
+					projectModel.modified = null;
+				} else {
+					projectModel.modified = sProjects.modified;
+				}
+				
+				sProjects.status = SyncStatus.STATUS_LOADING;
+				
+//				projectIdCache = new Dictionary();
+				projectModel.pageOffsetRemote = 0;
+				projectModel.pageSizeRemote = PAGESIZE_DOWN;				
+				
+				debug( "projects ["+projectModel.modified+"]");
+				projectModel.callService( 'list', pdResProjects, faultHandler);
+			}
+			
+			protected function pdResProjects( evt:ResultEvent, token:Object=null):void {
+				var pres:ArrayCollection = new ArrayCollection( evt.result as Array);
+				
+//				debug( "  - projects #["+pres.length+"/"+ownerModel.pageOffsetRemote+"]");
+				
+				for( var j:int = 0; j < pres.length; j++) {
+					var sp:SignsProject = pres[ j] as SignsProject;
+					saveContent( sp);
+					
+					idCache.cache( sp);
+					
+//					debug( "  down: "+sp.toString());
+				}
+				
+//				debug( "  - done.");
+				
+				projectModel.pageOffsetRemote += pres.length;
+				sProjects.downCount = projectModel.pageOffsetRemote;
+				
+				if ( pres.length == projectModel.pageSizeRemote) {
+					
+					projectModel.callService( 'list', pdResProjects, faultHandler);
+//					debug( "next ...");
+				} else {
+					sProjects.status = SyncStatus.STATUS_DONE;
+					
+					debug( "done.");
+					pdLocations();
+				}
+			}
+			
+			protected function pdLocations():void {
+				
+				if ( locationModel == null) locationModel = new SignsLocation();
+				
+				if ( forceRebuild) {
+					locationModel.clear();
+					locationModel.modified = null;
+				} else {
+					locationModel.modified = sLocations.modified;
+				}
+				
+				sLocations.status = SyncStatus.STATUS_LOADING;
+				visibleLocationList.removeAll();
+				
+				locationModel.pageOffsetRemote = 0;
+				locationModel.pageSizeRemote = PAGESIZE_DOWN;
+				
+				serviceCall();
+				debug( "locations ["+locationModel.modified+"]");
+				locationModel.callService( 'list', pdResLocations, faultHandler);
+			}
+			
+			protected function pdResLocations( evt:ResultEvent, token:Object=null):void {
+				serviceResult();
+				var locList:ArrayCollection = new ArrayCollection( evt.result as Array);
+				
+//				debug( "  - locations #["+locList.length+"/"+locationModel.pageOffsetRemote+"]");
+				workStart();
+				for( var j:int = 0; j < locList.length; j++) {
+					var tl:SignsLocation = locList[ j] as SignsLocation;
+					saveContent( tl);
+					
+					idCache.cache( tl);
+					
+//					debug( "  down: "+tl.toString());
+				}
+				workDone();
+//				locList.addAll( lres);
+				
+//				debug( "  - done.");
+				
+				locationModel.pageOffsetRemote += locList.length;
+				sLocations.downCount = locationModel.pageOffsetRemote;
+
+				if ( locList.length == locationModel.pageSizeRemote) {
+					serviceCall();
+					locationModel.callService( 'list', pdResLocations, faultHandler);
+//					debug( "next ...");
+				} else {
+					sLocations.status = SyncStatus.STATUS_DONE;
+					
+					debug( "done.");
+					pdItems();
+				}
+			}
+			
+			protected function pdItems():void {
+				
+				if ( itemModel == null) itemModel = new SignsItem();
+				itemModel.location_id = -1;
+
+				if ( forceRebuild) {
+					itemModel.clear();
+					itemModel.modified = null;
+				} else {
+					itemModel.modified = sItems.modified;
+				}
+				
+				sItems.status = SyncStatus.STATUS_LOADING;
+				
+				itemReparentList = new Array();
+				
+				itemModel.pageOffsetRemote = 0;
+				itemModel.pageSizeRemote = PAGESIZE_DOWN;
+				
+				serviceCall();
+				debug( "items ["+itemModel.modified+"]");
+				itemModel.callService( 'list', pdResItems, faultHandler);
+				debug( "  pass1:");				
+			}
+			
+			protected function pdResItems( evt:ResultEvent, token:Object=null):void {
+				var ires:ArrayCollection = new ArrayCollection( evt.result as Array);
+				serviceResult();
+//				debug( "  - items #"+ires.length);
+				sItems.downCount = ires.length;
+
+				workStart();
+				for( var j:int = 0; j < ires.length; j++) {
+					var ti:SignsItem = ires[ j] as SignsItem;	
+					saveItem( ti);
+					
+					idCache.cache( ti);
+					
+//					debug( "  down: "+ti.toString());
+				}			
+				workDone();
+				
+				itemModel.pageOffsetRemote += ires.length;
+				sItems.downCount = itemModel.pageOffsetRemote;
+				
+				if ( ires.length == itemModel.pageSizeRemote) {
+					serviceCall();
+					itemModel.callService( 'list', pdResItems, faultHandler);
+					
+//					debug( "  - next ...");
+				} else {
+					sItems.status = SyncStatus.STATUS_SYNCING;
+					
+					debug( "  - done.");
+					pdItemsPass2();
+				}
+			}
+			
+			protected function pdItemsPass2():void { 
+				debug( "  pass2:");
+				
+				sItems.action = 'Reparenting ...';
+				sItems.total = itemReparentList.length;
+				
+				callLater( pdItemsPass2block);
+			}
+			
+			protected function pdItemsPass2block():void {
+				
+				debug( "  reparent #"+itemReparentList.length);
+
+				itemModel.forceUpdate = true;
+
+				var i:int = 0;
+				while( itemReparentList.length > 0 && i < PAGESIZE_PASS2) {
+					var cid:int = itemReparentList.pop();
+					
+					itemModel.cache_id = cid;
+					itemModel.load();
+
+					itemModel.cache_parent_id = idCache.globalToCache( itemModel, itemModel.parent_id);	//itemIdCache[ itemModel.parent_id] as int
+						
+					if ( itemModel.cache_parent_id <= 0) {
+						debug( "REPARENT ERROR: "+itemModel.toString());
+					}
+					
+					itemModel.save();
+
+					sItems.done = sItems.total - itemReparentList.length;
+					i++;
+				} 
+				itemModel.forceUpdate = false;
+
+				if ( itemReparentList.length > 0) {
+					callLater( pdItemsPass2block);
+				} else {
+					sItems.status = SyncStatus.STATUS_DONE;
+					
+					debug( "done.");
+					pdActions();
+				}
+			}
+			
+			protected function pdActions():void {
+				if ( actionModel == null) actionModel = new SignsAction();
+				actionModel.item_id = -1;
+
+				if ( forceRebuild) {
+					actionModel.clear();
+					actionModel.modified = null;
+				} else {
+					actionModel.modified = sActions.modified;
+				}
+
+				actionModel.pageOffsetRemote = 0;
+				actionModel.pageSizeRemote = PAGESIZE_DOWN;
+				actionBlockSize = actionModel.pageSizeRemote;
+				
+				debug( "actions ["+actionModel.modified+"]");
+				pdActionsNextPage();
+			}
+
+			protected function pdActionsNextPage():void {				
+				if ( actionBlockSize == actionModel.pageSizeRemote) {
+					
+					sActions.status = SyncStatus.STATUS_LOADING;
+					actionModel.callService( 'list', pdResActions, faultHandler);
+					
+//					debug( "next #"+actionModel.pageSizeRemote+" ...");
+				} else {
+					debug( "done.");
+					
+					sActions.action = 'Downloading ...';
+					sActions.status = SyncStatus.STATUS_DONE;
+					
+					pdIcons();
+				}
+			}
+			
+			protected function pdResActions( evt:ResultEvent, token:Object=null):void {
+				actionQueue = new ArrayCollection( evt.result as Array);
+				
+//				debug( "  - actions #"+actionQueue.length);
+				if ( actionBlockSize != actionModel.pageSizeRemote) {
+					debug( "  -  xxx");
+				}
+
+				actionBlockSize = actionQueue.length;
+				
+				actionModel.pageOffsetRemote += actionBlockSize;
+				sActions.downCount = actionModel.pageOffsetRemote;
+				sActions.total = actionBlockSize;
+				
+				workActionQueue();
+			}
+			
+			protected function workActionQueue():void {
+				
+				var inProgress:Boolean = false;
+				
+				sActions.status = SyncStatus.STATUS_SYNCING;
+				
+//				debug( "  downloading actions #"+actionList.length);
+				
+				if ( actionQueue.length > 0) {
+					var sa:SignsAction;
+					var rc:File;
+					
+					while( actionQueue.length > 0) {
+						sa = actionQueue.removeItemAt( 0) as SignsAction;
+//						debug( "  action: "+sa.toString());
+						
+						sActions.done = sActions.total - actionQueue.length;
+//						debug( "  DONE ["+sActions.done+" : "+sActions.total+"]");
+						
+						if ( sa.url != null && sa.url.length > 0) {
+							if ( sa.url.indexOf("http") != 0) {
+								var localFile:File = AppSettings.persistantStorage.resolvePath( 'files/'+sa.url);
+								
+								switch( imageDownloadMode) {
+									case IMGDL_NEVER:	// nie 
+									break;
+									
+									case IMGDL_OPTIM:	// optimiert
+										if ( localFile.exists) {
+											sa.cache_url = localFile.url;
+											break;
+										}
+									
+									default:			// immer
+
+										rc = sa.downloadFile( AppSettings.appBaseUrl+AppSettings.imageDownloadUrl+'/'+AppSettings.imageRootPath+'/'+sa.url, localFile);
+										
+										if ( rc != null) {
+											sa.addEventListener( Event.COMPLETE, downloadActionDone);
+											inProgress = true;
+											debug( "    downloading: "+sa.url);
+										} else {
+											//debug( "    already downloaded: "+localFile.url);
+										}
+										
+										sa.cache_url = localFile.url;
+								}
+							} else {
+//								debug( "    skip downloading: "+sa.url);								
+							}
+						}
+							
+//						var ti:SignsItem = SignsItem( itemCache[ sa.item_id]);
+//						var tu:SignsUser = SignsUser( usrCache[ sa.user_id]);
+						
+						var cid:int = idCache.globalToCache( sa, sa.id);
+						if ( cid >= 0) {
+							sa.cache_id = cid;
+						}
+						
+						sa.cache_item_id = idCache.globalToCache( itemModel, sa.item_id);				//itemIdCache[ sa.item_id];	//ti.cache_id;
+						sa.cache_user_id = idCache.globalToCache( userModel, sa.user_id);				//userIdCache[ sa.user_id];	//tu.cache_id;
+						sa.cache_project_id = idCache.globalToCache( projectModel, sa.project_id);	//projectIdCache[ sa.project_id] as int;
+
+						sa.cache_modified = sa.modified;
+						sa.save();
+						
+//						debug( "  down: "+sa.toString());
+							
+						if ( inProgress) break;
+					}
+				}
+				
+				if ( actionQueue.length == 0 && inProgress == false) {
+					sActions.status = SyncStatus.STATUS_DONE;					
+					pdActionsNextPage();
+				}
+			}
+			
+			protected function downloadActionDone( evt:Event):void {
+				var sa:SignsAction = evt.target as SignsAction;
+				sa.removeEventListener( Event.COMPLETE, downloadActionDone);
+				
+				debug( "    download done: "+sa.cache_url);
+				
+				workActionQueue();
+			}
+			
+			protected function pdIcons():void {
+				if ( iconModel == null) iconModel = new SignsIcon();
+
+				if ( forceRebuild) {
+					iconModel.clear();
+					iconModel.modified = null;
+				} else {
+					iconModel.modified = sIcons.modified;
+				}
+
+				iconModel.pageOffsetRemote = 0;
+				iconModel.pageSizeRemote = PAGESIZE_DOWN;
+				iconBlockSize = iconModel.pageSizeRemote;
+				
+				sIcons.status = SyncStatus.STATUS_LOADING;
+				
+				debug( "icons ["+iconModel.modified+"]");
+				pdIconsNextPage();
+			}
+			
+			protected function pdIconsNextPage():void {				
+				if ( iconBlockSize == iconModel.pageSizeRemote) {
+					
+					sIcons.status = SyncStatus.STATUS_LOADING;
+					iconModel.callService( 'list', pdResIcons, faultHandler);
+					
+//					debug( "next ...");
+				} else {
+					debug( "done.");
+					
+					sIcons.action = 'Downloading ...';
+					sIcons.status = SyncStatus.STATUS_DONE;
+					
+					pdIconMap();
+				}
+			}
+			
+			protected function pdResIcons( evt:ResultEvent, token:Object=null):void {
+				iconQueue = new ArrayCollection( evt.result as Array);
+				
+				debug( "  - icons #"+iconQueue.length);
+				
+				iconBlockSize = iconQueue.length;
+				
+				iconModel.pageOffsetRemote += iconBlockSize;
+
+				sIcons.action = 'Downloading ...';
+				sIcons.downCount = iconModel.pageOffsetRemote;
+				sIcons.total = iconBlockSize;
+				
+				sIcons.status = SyncStatus.STATUS_SYNCING;
+				workIconQueue();
+			}
+			
+			protected function workIconQueue():void {
+				
+				var inProgress:Boolean = false;
+				
+//				debug( "  downloading icons #"+iconList.length);
+				
+				if ( iconQueue.length > 0) {
+					var si:SignsIcon;
+					var rc:File;
+						
+					while( iconQueue.length > 0) {
+						si = iconQueue.removeItemAt( 0) as SignsIcon;
+						
+						sIcons.done = sIcons.total - iconQueue.length;
+//						debug( "  DONE ["+sIcons.done+" : "+sIcons.total+"]");
+						
+						if ( si.preview_url != null && si.preview_url.length > 0) {
+							var localFile:File = AppSettings.persistantStorage.resolvePath( 'files'+si.preview_url);
+							
+							switch( IMGDL_OPTIM /*imageDownloadMode*/) {
+								case IMGDL_NEVER:	// nie 
+									break;
+								
+								case IMGDL_OPTIM:	// optimiert
+									if ( localFile.exists) {
+										si.cache_preview_url = localFile.url;
+										break;
+									}
+									
+								default:			// immer							
+									rc = si.downloadFile( AppSettings.appBaseUrl+AppSettings.iconDownloadUrl+'/'+si.preview_url, localFile);
+									
+									if ( rc != null) {
+										inProgress = true;					
+										si.addEventListener( Event.COMPLETE, downloadIconDone);
+									} else debug( "    already downloaded: "+localFile.url);
+									
+									si.cache_preview_url = localFile.url;
+							}
+						}
+						
+						saveContent( si);
+							
+//						iconIdCache[ si.id] = si.cache_id;
+						idCache.cache( si);
+						
+//						debug( "  down: "+si.toString());
+
+						if ( inProgress) break;
+					}
+				} 
+
+				if ( iconQueue.length == 0 && inProgress == false) {
+					sIcons.status = SyncStatus.STATUS_DONE;					
+					pdIconsNextPage();
+				}
+			}
+			
+			protected function downloadIconDone( evt:Event):void {
+				var si:SignsIcon = evt.target as SignsIcon;
+				si.removeEventListener( Event.COMPLETE, downloadIconDone);
+				
+				debug( "    download done: "+si.cache_preview_url);
+				
+				workIconQueue();
+			}
+			
+			protected function pdIconMap():void {
+				
+				if ( iconMapModel == null) iconMapModel = new SignsIconMap();
+
+				if ( forceRebuild) {
+					iconMapModel.clear();
+					iconMapModel.modified = null;
+				} else {
+					iconMapModel.modified = sIconMap.modified;
+				}
+				
+				iconMapModel.pageOffsetRemote = 0;
+				iconMapModel.pageSizeRemote = PAGESIZE_DOWN_SMALL;
+				
+				sIconMap.status = SyncStatus.STATUS_LOADING;
+				
+				debug( "iconMap ["+iconMapModel.modified+"]");
+				iconMapModel.callService( 'list', pdResIconMap, faultHandler);
+			}
+			
+			protected function pdResIconMap( evt:ResultEvent, token:Object=null):void {
+				var icres:Array = evt.result as Array;
+				
+//				debug( "  - iconmap #"+icres.length);
+				sIconMap.downCount = icres.length;
+				
+				var im:SignsIconMap;				
+				
+				for( var j:int = 0; j < icres.length; j++) {
+					im = icres[ j] as SignsIconMap;
+					
+//					debug( "  -   create iconMap "+im.id+"/"+im.cache_id+" to item "+itemIdCache[ im.item_id]+"  and icon "+iconIdCache[ im.icon_id]);
+					
+					var cid:int = idCache.globalToCache( im, im.id);
+					if ( cid >= 0) {
+						im.cache_id = cid;
+					}
+					
+					im.cache_item_id = idCache.globalToCache( itemModel, im.item_id);	//itemIdCache[ im.item_id] as int;
+					im.cache_icon_id = idCache.globalToCache( iconModel, im.icon_id);	//iconIdCache[ im.icon_id] as int;
+
+					im.cache_modified = im.modified;
+					im.save();
+					
+//					debug( "  down: "+im.toString());
+				}				
+				
+//				debug( "  - done.");
+				
+				iconMapModel.pageOffsetRemote += icres.length;
+				sIconMap.downCount = iconMapModel.pageOffsetRemote;
+				
+				if ( icres.length == iconMapModel.pageSizeRemote) {
+					
+					iconMapModel.callService( 'list', pdResIconMap, faultHandler);
+//					debug( "  - next ...");
+				} else {
+					sIconMap.status = SyncStatus.STATUS_DONE;
+					
+					debug( "done.");
+					pdTags();
+				}
+			}
+
+			protected function pdTags():void {
+				
+				if ( tagModel == null) tagModel = new SignsTag();
+
+				if ( forceRebuild) {
+					tagModel.clear();
+					tagModel.modified = null;
+				} else {
+					tagModel.modified = sTags.modified;
+				}
+				
+				sTags.status = SyncStatus.STATUS_LOADING;
+				
+//				tagIdCache = new Dictionary();
+				tagReparentList = new Array();
+				
+				tagModel.pageOffsetRemote = 0;
+				tagModel.pageSizeRemote = PAGESIZE_DOWN;
+				
+				debug( "tags ["+tagModel.modified+"]");
+				tagModel.callService( 'list', pdResTags, faultHandler);
+				debug( "  pass1:");				
+			}
+			
+			protected function pdResTags( evt:ResultEvent, token:Object=null):void {
+				var ares:Array = evt.result as Array;
+				
+//				debug( "tags #"+ares.length);
+
+				var st:SignsTag;				
+//				debug( "  pass1:");
+				
+				var resolveLater:Boolean = false;
+				for( var j:int = 0; j < ares.length; j++) {
+					st = ares[ j] as SignsTag;
+					//					debug( "  link "+ta.id+"/"+ta.cache_id+" to item "+ti.id+"/"+ti.cache_id+"  to user "+tu.id+"/"+tu.cache_id);
+
+					if ( st.parent_id > 0) {
+						var tempParent:int = idCache.globalToCache( tagModel, st.parent_id);	//itemIdCache[ itemModel.parent_id] as int;
+						
+						if ( tempParent > 0) {
+							st.cache_parent_id = tempParent;
+						} else {
+							resolveLater = true;
+						}
+					}
+					
+					saveContent( st);
+					
+//					debug( "  down: "+st.toString());
+					
+					idCache.cache( st);
+					
+					if ( resolveLater) {
+						tagReparentList.push( st.cache_id);
+						resolveLater = false;
+					}
+				}				
+				
+				tagModel.pageOffsetRemote += ares.length;
+				sTags.downCount = tagModel.pageOffsetRemote;
+				
+				if ( ares.length == tagModel.pageSizeRemote) {
+					
+					tagModel.callService( 'list', pdResTags, faultHandler);
+					
+//					debug( "  - next ...");
+				} else {
+					sTags.status = SyncStatus.STATUS_SYNCING;
+					
+					debug( "  - done.");
+					pdTagsPass2();
+				}
+			}
+			
+			protected function pdTagsPass2():void { 
+				debug( "  pass2:");
+				
+				sTags.action = 'Reparenting ...';
+				sTags.total = tagReparentList.length;
+				
+				callLater( pdTagsPass2block);
+			}
+			
+			protected function pdTagsPass2block():void {
+				
+//				debug( "  reparent #"+itemReparentList.length);
+
+				var i:int = 0;
+				tagModel.forceUpdate = true;
+				while( tagReparentList.length > 0 && i < PAGESIZE_PASS2) {
+					var cid:int = tagReparentList.pop();
+					
+					tagModel.cache_id = cid;
+					tagModel.load();
+					
+					tagModel.cache_parent_id = idCache.globalToCache( tagModel, tagModel.parent_id);		//tagIdCache[ tagModel.parent_id] as int;
+					
+					tagModel.save();
+					
+					sTags.done = sTags.total - tagReparentList.length;
+
+					i++;
+				} 
+				tagModel.forceUpdate = false;
+				
+				if ( tagReparentList.length > 0) {
+					callLater( pdTagsPass2block);
+				} else {
+					sTags.status = SyncStatus.STATUS_DONE;
+					
+					debug( "done.");
+					pdTagMap();
+				}
+			}
+			
+			protected function pdTagMap():void {
+				
+				if ( tagMapModel == null) tagMapModel = new SignsTagMap();
+
+				if ( forceRebuild) {
+					tagMapModel.clear();
+					tagMapModel.modified = null;
+				} else {
+					tagMapModel.modified = sTagMap.modified;
+				}
+				
+				tagMapModel.pageOffsetRemote = 0;
+				tagMapModel.pageSizeRemote = PAGESIZE_DOWN_SMALL;
+				
+				sTagMap.status = SyncStatus.STATUS_LOADING;
+
+				debug( "tagmap ["+tagMapModel.modified+"]");
+				tagMapModel.callService( 'list', pdResTagMap, faultHandler);
+			}
+			
+			protected function pdResTagMap( evt:ResultEvent, token:Object=null):void {
+				var tmres:Array = evt.result as Array;
+				
+//				debug( "  - tagmap #"+tmres.length);
+				sTagMap.downCount = tmres.length;
+				
+				var tm:SignsTagMap;
+				
+				for( var j:int = 0; j < tmres.length; j++) {
+					tm = tmres[ j] as SignsTagMap;
+					
+//					debug( "  -   create tagMap "+tm.id+"/"+tm.cache_id+" to item "+itemIdCache[ tm.item_id]+"  and tag "+tagIdCache[ tm.tag_id]);
+					
+					var cid:int = idCache.globalToCache( tm, tm.id);
+					if ( cid >= 0) {
+						tm.cache_id = cid;
+					}
+					
+					tm.cache_item_id = idCache.globalToCache( itemModel, tm.item_id);	//itemIdCache[ tm.item_id] as int;
+					tm.cache_tag_id = idCache.globalToCache( tagModel, tm.tag_id);		//tagIdCache[ tm.tag_id];
+
+					tm.cache_modified = tm.modified;
+					tm.save();
+					
+//					debug( "  down: "+tm.toString());
+				}				
+				
+//				debug( "  - done.");
+
+				tagMapModel.pageOffsetRemote += tmres.length;
+				sTagMap.downCount = tagMapModel.pageOffsetRemote;
+				
+				if ( tmres.length == tagMapModel.pageSizeRemote) {
+					
+					tagMapModel.callService( 'list', pdResTagMap, faultHandler);
+//					debug( "  - next ...");
+				} else {
+					sTagMap.status = SyncStatus.STATUS_DONE;
+					
+					debug( "done.");
+					
+					downSyncDone();
+				}
+			}
+			
+			//----------------------------------------------------------------------------------------------
+/*			
+			protected function downloadFile( remoteBase:String, file:File):File {
+				var urlStream:URLStream = new URLStream();
+				var request:URLRequest = new URLRequest( AppSettings.appBaseUrl+file.name);
+				if ( fileStream == null) fileStream = new FileStream();
+				
+				urlStream.addEventListener( Event.COMPLETE, downloadDone);
+				urlStream.addEventListener( ProgressEvent.PROGRESS, copyBytes);
+				
+				fileStream.openAsync(file, FileMode.WRITE);
+				
+				debug( "dl ["+file.url+" / "+request.url+"]");
+				
+				urlStream.load(request);
+				
+				return file;
+			}
+			
+			protected function copyBytes( evt:ProgressEvent):void {
+				var inStream:URLStream = URLStream( evt.target);
+				
+				debug( "  dl ["+inStream.bytesAvailable+" / "+evt.bytesLoaded+" / "+evt.bytesTotal+"]");
+				
+				var dataBuffer:ByteArray = new ByteArray();
+				inStream.readBytes(dataBuffer, 0, inStream.bytesAvailable);
+				fileStream.writeBytes(dataBuffer, 0, dataBuffer.length);
+			}
+			
+			protected function downloadDone( evt:Event):void {
+				var inStream:URLStream = URLStream( evt.target);
+				
+				debug( "dl done.");
+				
+				fileStream.close();
+				inStream.close();
+			}
+*/			
+			//----------------------------------------------------------------------------------------------
+			
+			protected function dlModeTipFormat( val:String):String {
+				return IMGDL_LABELS[ parseInt( val) +1];
+			}
+			
+			protected function changeDownloadOpt(event:Event):void {
+				imageDownloadMode = slDownloadMode.value;
+
+				lDownloadMode.text = dlModeTipFormat( ''+imageDownloadMode);
+				
+				debug( "download Optimization: ["+imageDownloadMode+"] ["+lDownloadMode.text+"]");
+			}
+			
+			protected function changeRebuildOpt(event:Event=null):void {
+//				rebuildDB = cbRebuildDB.enabled;
+				
+				setSyncControls();
+				
+				if ( rebuildEnTimer == null) {
+					rebuildEnTimer = new Timer( 2000, 1);
+					rebuildEnTimer.addEventListener( TimerEvent.TIMER_COMPLETE, disableUnlock);
+				}
+				
+				if ( cbDebug.selected) {
+					rebuildEnTimer.reset();
+					rebuildEnTimer.start();
+				} else rebuildEnTimer.stop();
+				
+				if ( cbDebug.selected) debugOn = true;
+				else {
+					if ( bUploadDB.enabled) debugOn = false;
+				}
+			}
+			
+			protected function disableUnlock( te:TimerEvent):void {
+				cbDebug.selected = false;
+				
+				changeRebuildOpt();
+			}
+			
+			protected function serviceCall():void {
+				serviceStart = new Date().time;
+			}
+			
+			protected function serviceResult():void {
+				serviceAvg =  new Date().time - serviceStart;
+			}
+
+			protected function workStart():void {
+				workStarted = new Date().time;
+			}
+			
+			protected function workDone():void {
+				workAvg =  new Date().time - workStarted;
+				
+//				debug( "svc: "+serviceAvg+"    wrk: "+workAvg);
+			}
+			
+			//================================================================================================
+			
+			protected function handleDeleteDB( evt:Event):void {
+				debug( "closing local database for delete ...");
+				var crsp:Responder = new flash.net.Responder( dbDeleteHandler, dbDeleteHandler);
+				Model.closeLocalDB( crsp);
+			}
+			
+			protected function dbDeleteHandler( sqre:Object):void {
+				debug( "database closed ["+sqre.toString()+"]");
+				
+				var dbf:File = AppSettings.databaseStorage.resolvePath( Model.dbFile);
+				
+				try {
+					dbf.deleteFile();				
+					debug ( "deleted DB ["+dbf.nativePath+"]");
+					
+					dispatchEvent( new TopEvent( TopEvent.FORCE_RESTART, true));
+					//				NativeApplication.nativeApplication.exit();
+				} catch( e:Error) {
+					taFaults.text += "error deleting DB ["+dbf.nativePath+"]. open somewhere else?";
+					debugOn = true;
+				}
+			}
+			
+			protected function handleDownloadDB( evt:Event):void {
+				debug( "closing local database for download ...");
+				var crsp:Responder = new flash.net.Responder( dbDownloadCloseHandler, dbDownloadCloseHandler);
+				
+				var rc:Boolean = Model.closeLocalDB( crsp);
+				
+				if ( rc) dbDownloadCloseHandler( null);
+			}
+			
+			protected function dbDownloadCloseHandler( sqre:Object):void {
+				debug( "database closed. downloading ...");
+
+				var dbf:File = AppSettings.databaseStorage.resolvePath( Model.dbFile);
+
+				try {
+					debug ( "deleting DB ["+dbf.nativePath+"]");
+					dbf.deleteFile();				
+				} catch( e:Error) {
+					taFaults.text += "error deleting DB. open somewhere else?\n";
+					debugOn = true;
+					
+					return;
+				}
+
+				itemModel.addEventListener(Event.COMPLETE, dbDownloadDone);
+				itemModel.addEventListener(ProgressEvent.PROGRESS, onDownloadDbProgress);
+				
+				itemModel.downloadFile( AppSettings.appBaseUrl+AppSettings.databaseImagePath, dbf);
+				debugOn = true;
+				
+				debug ( "downloading DB image ["+dbf.nativePath+"]");
+			}
+			
+			private function onDownloadDbProgress(event:ProgressEvent):void {
+				//				dispatchEvent( event);
+//				debug( "  download "+ Math.round((Number(event.bytesLoaded) / Number(event.bytesTotal)) * 100)+"%");
+				debugOn = true;
+				pbUpload.progress = Math.round((Number(event.bytesLoaded) / Number(event.bytesTotal)) * 100)
+			}
+			
+			protected function dbDownloadDone( evt:Event):void {
+
+				itemModel.removeEventListener(Event.COMPLETE, dbDownloadDone);
+				debugOn = false;
+				
+				dispatchEvent( new TopEvent( TopEvent.FORCE_RESTART, true));
+			}
+			
+			protected function handleUploadDB( evt:Event):void {
+				var dbf:File = AppSettings.databaseStorage.resolvePath( Model.dbFile);
+				
+				var dburl:String = uploadDbFile( AppSettings.uploadDBScriptUrl, 'debug', 'database', dbf);
+				bUploadDB.enabled = false;
+				
+				debug ( "uploaded DB ["+dburl+"]");
+			}
+			
+			protected function uploadDbFile( remoteScript:String, remoteBasePath:String, remoteOffsetPath:String, up:File):String {
+				var sendVars:URLVariables = new URLVariables();
+				sendVars.action = "upload";
+				sendVars.path = remoteBasePath+'/'+ remoteOffsetPath;		// AppSettings.imageRootPath+"/"+AppSettings.imageOffsetPath;
+				sendVars.user = AppSettings.getUser().username;
+				sendVars.platform = Capabilities.os.replace(" ", "");				
+				sendVars.version = AppSettings.versionNumber;
+				
+				var request:URLRequest = new URLRequest(); 
+				request.data = sendVars;
+				request.url = remoteScript;
+				request.method = URLRequestMethod.POST;
+				request.contentType = "application/octet-stream";
+				
+				if ( upldFileDb != null) {
+					upldFileDb.removeEventListener(ProgressEvent.PROGRESS, onUploadDbProgress);
+					upldFileDb.removeEventListener( DataEvent.UPLOAD_COMPLETE_DATA, onUploadDbComplete);
+					upldFileDb.removeEventListener(IOErrorEvent.IO_ERROR, onUploadDbIoError);
+					upldFileDb.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onUploadDbSecurityError);						
+				}
+				upldFileDb = up;
+				upldFileDb.addEventListener(ProgressEvent.PROGRESS, onUploadDbProgress);
+				upldFileDb.addEventListener(DataEvent.UPLOAD_COMPLETE_DATA, onUploadDbComplete);
+				upldFileDb.addEventListener(IOErrorEvent.IO_ERROR, onUploadDbIoError);
+				upldFileDb.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onUploadDbSecurityError);
+				
+				debug( "uploading: "+upldFileDb.nativePath+" / "+upldFileDb.size);
+				
+				upldFileDb.upload( request, "file", false);
+				
+				upDBrequest = request;
+				
+				return remoteOffsetPath+'/'+up.name;
+			}
+			
+			// Get upload progress
+			private function onUploadDbProgress(event:ProgressEvent):void {
+//				dispatchEvent( event);
+				debug( "  upload ["+ event.bytesLoaded+"] ["+event.bytesTotal+"]");
+				pbUpload.progress = Math.round((Number(event.bytesLoaded) / Number(event.bytesTotal)) * 100)
+			}
+			
+			// Called on upload complete
+			private function onUploadDbComplete(event:DataEvent):void {
+//				dispatchEvent( new Event( Event.COMPLETE));
+				debugOn = false;
+				bUploadDB.enabled = true;
+				debug( "upload done.");
+			}
+			
+			// Called on upload io error
+			private function onUploadDbIoError(event:IOErrorEvent):void {
+				debug("IO Error in uploading file: "+event);
+				debugOn = false;
+				bUploadDB.enabled = true;
+			}
+			
+			// Called on upload security error
+			private function onUploadDbSecurityError(event:SecurityErrorEvent):void {
+				debug("Security Error in uploading file: "+event);
+				debugOn = false;
+				bUploadDB.enabled = true;
+			}
+			
+			//-----------------------------------------------------------------------------------
+
+			protected function saveContent( si:SignsContentModel):void {
+
+				var cid:int = idCache.globalToCache( si, si.id);
+				if ( cid >= 0) {
+					si.cache_id = cid;
+				}
+				
+				si.cache_modified = si.modified;
+				si.save();
+			}
+			
+			protected function saveItem( item:SignsItem):void {
+				var resolveLater:Boolean = false;
+
+				var cid:int = idCache.globalToCache( item, item.id);
+				if ( cid >= 0) {
+//					if ( item.cache_id != cid) debug( "    cacheID:   ["+item.cache_id+"] ["+cid+"]");
+					item.cache_id = cid;
+				} //else Model.error( "saveItem itm_cache_lookup");
+				
+				var clocid:int = idCache.globalToCache( locationModel, item.location_id);	//locationIdCache[ ti.location_id] as int;
+				if ( clocid < 0) Model.error( "saveItem loc_cache_lookup");
+//				if ( item.cache_location_id != clocid) debug( "    locationID: ["+item.cache_location_id+"] ["+clocid+"]");
+				item.cache_location_id = clocid;
+				
+				var cownid:int = idCache.globalToCache( ownerModel, item.owner_id);			//ownerIdCache[ ti.owner_id] as int;
+//				if ( cownid < 0) Model.error( "saveItem own_cache_lookup");
+//				if ( item.cache_owner_id != cownid) debug( "    ownerID:   ["+item.cache_owner_id+"] ["+cownid+"]");
+				item.cache_owner_id = cownid;
+				
+				if ( item.parent_id > 0) {
+					var tempParent:int = idCache.globalToCache( item, item.parent_id);	//itemIdCache[ itemModel.parent_id] as int;
+
+//					if ( item.cache_parent_id != tempParent) debug( "    parentID:  ["+item.cache_parent_id+"] ["+tempParent+"]");
+
+					if ( tempParent > 0) {
+						item.cache_parent_id = tempParent;
+					} else {
+						resolveLater = true;
+					}
+				}
+				//					debug( "  link "+ti.id+"/"+ti.cache_id+" to loc "+tl.id+"/"+tl.cache_id);
+				
+				item.cache_modified = item.modified;
+				item.save();				
+				
+				if ( resolveLater) {
+					resolveLater = false;
+					itemReparentList.push( item.cache_id);
+				}
+			}
+
+			//----------------------------------------------------------------------------------------------
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				var emsg:String = "-------------------------------------------------\n";
+				emsg += "token  : " + token + "\n";
+//				emsg += "err    : " + fault + "\n";
+				emsg += "code   : " + fault.fault.faultCode + "\n";
+				emsg += "message: " + fault.fault.faultString + "\n";
+				emsg += "detail : " + fault.fault.faultDetail + "\n";
+				emsg += "-------------------------------------------------\n";
+				
+				debug( emsg);
+				taFaults.text += emsg;
+				debugOn = true;
+			}
+			
+			protected function set debugOn( e:Boolean):void {
+				vgDebug.includeInLayout = vgDebug.visible = vgDebug.enabled = e;
+			}
+						
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+		]]>
+	</fx:Script>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:Button id="bSync" width="150" label="Sync" click="doSync( event);" enabled="false"/>
+		<s:BusyIndicator id="biSyncStatus" visible="false"/>
+		<s:Label id="lSyncStatus" width="100%" textAlign="right"/>
+	</s:HGroup>
+	<s:Scroller measuredSizeIncludesScrollBars="true" pageScrollingEnabled="true"
+				scrollSnappingMode="leadingEdge"  width="100%" height="100%">
+		<s:Group>
+			<s:layout>
+				<s:TileLayout horizontalGap="0" orientation="rows" requestedColumnCount="2"
+							  requestedRowCount="5" verticalGap="0"/>
+			</s:layout>
+			<ns:SyncStatus id="sUsers" model="{ new SignsUser() }" label="Users" width="100%"/>
+			<ns:SyncStatus id="sOwners" model="{ new SignsOwner() }" label="Owners" width="100%"/>
+			<ns:SyncStatus id="sProjects" model="{ new SignsProject() }" label="Projects" width="100%"/>
+			<ns:SyncStatus id="sLocations" model="{ new SignsLocation() }" label="Locations" width="100%"/>
+			<ns:SyncStatus id="sItems" model="{ new SignsItem() }" label="Items" width="100%"/>
+			<ns:SyncStatus id="sActions" model="{ new SignsAction() }" label="Actions" width="100%"/>
+			<ns:SyncStatus id="sIcons" model="{ new SignsIcon() }" label="Icons" width="100%"/>
+			<ns:SyncStatus id="sIconMap" model="{ new SignsIconMap() }" label="IconMap" width="100%"/>
+			<ns:SyncStatus id="sTags" model="{ new SignsTag() }" label="Tags" width="100%"/>
+			<ns:SyncStatus id="sTagMap" model="{ new SignsTagMap() }" label="TagMap" width="100%"/>
+		</s:Group>			
+	</s:Scroller>
+	<mx:HRule width="100%"/>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:Label text="Bilddownloads"/>
+		<s:Spacer width="100%" height="100%"/>
+		<s:Label id="lDownloadMode" text="mode"/>
+		<s:HSlider id="slDownloadMode" dataTipFormatFunction="dlModeTipFormat" change="changeDownloadOpt( event);" liveDragging="true"
+				   maximum="1" minimum="-1" stepSize="1" value="0"/>
+	</s:HGroup>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:Label text="Debug Optionen"/>
+		<s:Spacer width="100%" height="100%"/>
+		<s:ToggleSwitch id="cbDebug" label="debug mode" selected="false" enabled="false" change="changeRebuildOpt(event)"/>
+	</s:HGroup>
+	<s:VGroup id="vgDebug" visible="true" width="100%" gap="1">
+		<s:BorderContainer id="bcDebugDB" width="100%" 
+						   borderVisible="true" borderWeight="1" cornerRadius="2"
+						   horizontalCenter="0" verticalCenter="0">
+			<s:layout>
+				<s:VerticalLayout gap="1" paddingBottom="2" paddingLeft="2" paddingRight="2"
+								  paddingTop="2"/>
+			</s:layout>
+			<s:Label fontSize="12" text="Datenbank:"/>
+			<s:HGroup width="100%" verticalAlign="middle">
+				<s:Button id="bDeleteDB" label="Löschen" chromeColor="#BE4747"
+						  click="handleDeleteDB(event);"/>
+				<s:Spacer width="25" height="100%"/>
+				<s:Button id="bDownloadDB" label="Download" chromeColor="#F55D5D"
+						  click="handleDownloadDB(event);"/>
+				<s:Spacer width="100%" height="100%"/>
+				<s:Button id="bUploadDB" label="Upload" chromeColor="#78C648"
+						  click="handleUploadDB(event);"/>
+			</s:HGroup>		
+			<s:Spacer width="100%" height="5"/>
+			<ns:ProgressBar id="pbUpload" width="100%"/>
+		</s:BorderContainer>
+		<s:BorderContainer id="bcDebugService" width="100%"
+						   borderVisible="true" borderWeight="1" cornerRadius="2"
+						   horizontalCenter="0" verticalCenter="0">
+			<s:layout>
+				<s:VerticalLayout gap="0" paddingBottom="2" paddingLeft="2" paddingRight="2"
+								  paddingTop="2"/>
+			</s:layout>
+			<s:Label fontSize="12" text="Log:"/>
+			<s:Label id="taFaults" width="100%" height="85" 
+					 fontSize="10" maxDisplayedLines="8"
+					backgroundAlpha="0.6" backgroundColor="0xc0c0c0" 
+					 showTruncationTip="true"/> <!-- editable="false" selectable="true"/ -->
+		</s:BorderContainer>
+	</s:VGroup>
+	<!-- s:VGroup width="300" height="100%" paddingBottom="2" paddingLeft="2" paddingRight="2"
+			  paddingTop="2">
+		<s:HGroup width="100%" gap="0" verticalAlign="bottom">
+			<s:Label text="Interfaces:"/>
+			<s:Spacer width="100%" height="100%"/>
+			<s:Button label="Refresh" click="detectConnectivity();"/>
+		</s:HGroup>
+		<s:List id="lInterfaces" width="100%" height="100%" borderVisible="true"
+				itemRenderer="de.ms_ite.mobile.topplan.renderer.InterfaceRenderer">
+		</s:List>
+	</s:VGroup -->
+</s:View>

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark"
+		   xmlns:ns="de.ms_ite.mobile.*"
+		   creationComplete="initUI(event)"
+		   focusOut="handleClose(event)" click="handleClose( event)">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import flash.filesystem.File;
+			
+			import models.SignsModel;
+			import models.SignsItem;
+			
+			import mx.events.FlexEvent;
+			
+			protected var _item:SignsItem;
+			
+			protected var fOk:Boolean = true;
+			protected var fNew:Boolean = true;
+			protected var fEdit:Boolean = true;
+			protected var fAction:Boolean = true;
+			protected var fDelete:Boolean = true;
+			protected var fHistory:Boolean = true;
+			
+			protected var fCamera:Boolean = false;
+			protected var fCamroll:Boolean = false;
+			protected var fBrowse:Boolean = true;
+			
+			protected function initUI(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				
+			}
+			
+			public function set item( it:SignsItem):void {
+				_item = it;
+				
+				fCamera = (_item != null && CameraUI.isSupported);
+				fCamroll = (_item != null && CameraRoll.supportsBrowseForImage);
+			}
+
+			public function get item():SignsItem {
+				return _item;
+			}
+			
+			protected function triggerNew( evt:Event):void {
+				postEvent( TopEvent.ITEM_NEW);
+				evt.stopPropagation();
+			}
+			
+			protected function triggerEdit( evt:Event):void {
+				postEvent( TopEvent.ITEM_EDIT);
+				evt.stopPropagation();
+			}
+			
+			protected function triggerHistory( evt:Event):void {
+				postEvent( TopEvent.ITEM_HISTORY);
+				evt.stopPropagation();
+			}
+			
+			protected function triggerOk( evt:Event):void {
+				postEvent( TopEvent.ITEM_ACTION_OK);
+				evt.stopPropagation();
+			}
+			
+			protected function triggerDelete( evt:Event):void {
+				postEvent( TopEvent.ITEM_ACTION_DELETE);
+				evt.stopPropagation();
+			}
+			
+			protected function triggerAction( evt:Event):void {
+				postEvent( TopEvent.ITEM_ACTION);
+				evt.stopPropagation();
+			}
+			
+			protected function triggerDocu( evt:Event):void {
+				postEvent( TopEvent.ITEM_ACTION_DOCUMENT);
+				evt.stopPropagation();
+			}
+			
+			protected function triggerSnapshot(event:MouseEvent):void {
+				postEvent( TopEvent.ITEM_SNAPSHOT);
+				event.stopPropagation();
+			}
+			
+			protected function triggerSnapshotPref(event:MouseEvent):void {
+				postEvent( TopEvent.ITEM_SNAPSHOT_PREF);
+				event.stopPropagation();
+			}
+			
+			protected function triggerCamRoll(event:MouseEvent):void {
+				postEvent( TopEvent.ITEM_CAMERAROLL);
+				event.stopPropagation();
+			}
+			
+			protected function triggerBrowse(event:MouseEvent):void {
+				postEvent( TopEvent.ITEM_BROWSE);
+				event.stopPropagation();
+			}
+			
+			protected function handleClose(event:Event):void {
+				// TODO Auto-generated method stub
+				this.close();
+				trace( "closed.");
+			}			
+
+			protected function postEvent( type:String, dParent:DisplayObjectContainer=null):void {
+				
+				var evt:TopEvent = new TopEvent( type, true);
+				
+				evt.item_id = (_item != null) ? _item.id : -1;
+				evt.item_id = (_item != null) ? _item.id : -1;
+				evt.user_id = AppSettings.getUser().id;
+				evt.item = _item;
+				evt.parent = ( dParent == null) ? this.owner : dParent;
+				
+				close();
+				
+				dispatchEvent( evt);
+				
+				debug( "item ["+evt.item_id+"] ["+evt.type+"]");
+			}
+
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout paddingBottom="5" paddingLeft="5" paddingRight="5" paddingTop="5" horizontalAlign="center" />
+	</s:layout>
+	<s:Scroller width="100%" height="100%">
+		<s:VGroup>
+			<s:Button id="bPhotoS" label="Standortphoto" enabled="{fCamera || fBrowse}" width="100%" click="triggerSnapshotPref( event);"/>
+			<s:Button id="bFile" label="Datei ..." enabled="{fBrowse}" width="100%" click="triggerBrowse( event);"/>
+			<s:Button id="bPhoto_" label="Photo" enabled="{fCamera}" width="100%" click="triggerSnapshot( event);"/>
+			<!-- s:Button id="bRoll" label="Camera roll" enabled="{fCamroll}" width="100%" click="triggerCamRoll( event);"/ -->
+			<s:Spacer width="100%" height="4"/>
+			<s:Button id="bOk" label="OK" chromeColor="#40e040" enabled="{fOk}" width="100%" click="triggerOk( event);"/>
+			<s:Spacer width="100%" height="4"/>
+			<s:Button id="bEdit" label="Bearbeiten" enabled="{fEdit}" width="100%" click="triggerEdit( event);"/>
+			<s:Spacer width="100%" height="4"/>
+			<s:Button id="bAction" label="Mangel/Status" chromeColor="#e04040" enabled="{fAction}" width="100%" click="triggerAction( event);"/>
+			<!-- s:Button id="bDoc" label="Document" chromeColor="#c0c060" width="100%" click="triggerDocu( event);"/ -->
+			<s:Spacer width="100%" height="4"/>
+			<s:Button id="bNew" label="Objekt anhängen" enabled="{fNew}" width="100%" click="triggerNew( event);"/>
+			<s:Button id="bHistory" label="History" enabled="{fHistory}" width="100%" click="triggerHistory( event);"/>
+			<s:Spacer width="100%" height="4"/>
+			<s:Button id="bDelete" label="Löschen" chromeColor="#e08080" width="100%" enabled="{fDelete}" click="triggerDelete( event);"/>					
+		</s:VGroup>
+	</s:Scroller>
+</s:Callout>

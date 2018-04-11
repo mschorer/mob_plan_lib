@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  creationComplete="initUI(event)" gap="0">
+	<fx:Metadata>
+		[Event(name="change", type="flash.events.Event")]
+	</fx:Metadata>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.components.DropDownList;
+			import spark.components.HGroup;
+			import spark.components.Spinner;
+			import spark.components.SpinnerList;
+			import spark.components.SpinnerListContainer;
+			import spark.components.supportClasses.ListBase;
+			import spark.events.IndexChangeEvent;
+
+			protected var _selectedNode:XML;
+			protected var xmlTypes:XMLList = AppSettings.itemTypeXML;
+			protected var nodata:XMLListCollection = new XMLListCollection( new XMLList( '<item name="---" data="-1"/>'));
+			
+			protected var _typeId:int = -1;
+			protected var _typeTag:String;
+			protected var _uiMatches:Boolean = false;
+			
+			protected var selectLevels:Array;
+			
+			protected function initUI(event:FlexEvent):void {			
+//				debug( "init");
+				
+				if ( ! _uiMatches) selectTopDown( xmlTypes);
+			}
+			
+			override protected function createChildren():void {
+
+				selectLevels = new Array();
+				
+				if ( AppSettings.isDesktop) {
+					var c:HGroup = new HGroup();
+					c.percentWidth = 100;
+					
+					addElement( c);
+					
+					for ( var i:int = 0; i < 3; i++) {
+						var ddl:DropDownList = new DropDownList();
+						ddl.requireSelection = true;
+						ddl.labelField = "@name";
+						ddl.percentWidth = 33;
+						ddl.addEventListener( Event.CHANGE, selectionChanged);
+						ddl.setStyle( 'interactionMode', 'mouse');
+						
+						c.addElement( ddl);
+						
+						selectLevels.push( ddl);
+					}
+				} else {
+					var dlc:SpinnerListContainer = new SpinnerListContainer();
+					dlc.percentWidth = 100;
+					dlc.height = 140;
+					
+					addElement( dlc);
+					
+					for ( var i:int = 0; i < 3; i++) {
+						var spl:SpinnerList = new SpinnerList();
+						spl.labelField = "@name";
+						spl.percentWidth = 33;
+						spl.addEventListener( Event.CHANGE, selectionChanged);
+						spl.wrapElements = false;
+//						spl.selectedIndex = 1;
+						
+						dlc.addElement( spl);
+						
+						selectLevels.push( spl);
+					}
+				}
+				
+				super.createChildren();
+			}
+			
+			public function get selectedItem():XML {
+				return _selectedNode;
+			}
+
+			public function get renderMode():String {
+				var renderMode:String = 'default';
+				var nd:XML = _selectedNode;
+				
+				while( nd != null) {
+					if ( "@render" in nd) {
+						var data:int = parseInt( nd.@data);
+						
+						if ( data >= 0) {
+							renderMode = nd.@render;
+							break;
+						}
+					}
+					nd = nd.parent();
+				}
+				
+				return renderMode;
+			}
+			
+			public function get colorCode():int {
+				var cc:int = 0xd0d0d0;
+				var nd:XML = _selectedNode;
+				
+				while( nd != null) {
+					if ( "@color" in nd) {
+						var col:int = parseInt( nd.@color, 16);
+						
+						if ( col >= 0) {
+							cc = col;
+							break;
+						}
+					}
+					nd = nd.parent();
+				}
+				
+				return cc;
+			}
+			
+			public function set value( type:int):void {
+			
+				_typeId = type;
+				_typeTag = type.toString( 16).toLowerCase();
+				_uiMatches = false;
+				
+				debug( "set type ["+_typeTag+"]");
+				
+				if ( selectLevels == null || selectLevels.length == 0) return;
+/*
+				if ( slType2 != null) {
+					slType2.selectedIndex = -1;
+					slSubType2.selectedIndex = -1;
+				}
+*/
+				selectTopDown( xmlTypes, 0, _typeTag);
+			}
+			
+			public function get value():int {
+				return _typeId;
+			}
+			
+			protected function getTypeId():int {
+				
+				var sval:int = parseInt( _selectedNode.@data.toString(), 16);
+				
+				return sval;
+/*
+				var tp:int = -1;
+				var i:int = selectLevels.length -1;
+				
+				while( tp <= 0 && i >= 0) {
+					var selection:XML = XML( ListBase( selectLevels[ i]).selectedItem); 
+					
+					var sval:int = parseInt( selection.@data.toString(), 16);
+					if ( sval >= 0) tp = sval;
+					i--;
+				}
+				
+				debug( "get type ["+tp+":"+tp.toString(16).toLowerCase()+"]");
+				
+				return tp;
+*/
+			}
+
+			protected function selectionChanged( evt:IndexChangeEvent):void {
+				var sel:ListBase;
+				
+				for( var i:int = 0; i < selectLevels.length; i++) {
+					sel = selectLevels[ i] as ListBase;
+
+					if ( evt.target == sel) {
+						if ( XML( sel.selectedItem).@name != '---') {
+							_selectedNode = sel.selectedItem as XML;
+							debug( "  sel chg ["+i+"]: "+_selectedNode.@name);						
+							callLater( selectTopDown, [ _selectedNode.*, i+1]);
+						} else {
+							debug( "  --- UNselection");
+							
+							if ( i > 0) {
+								var superSel:ListBase = selectLevels[ i-1] as ListBase;
+
+								_selectedNode = superSel.selectedItem as XML;
+								debug( "  sel super chg ["+i+"]: "+_selectedNode.@name);						
+								callLater( selectTopDown, [ _selectedNode.*, i]);
+							}
+						}
+						break;
+					}
+				}
+				
+				_typeId = getTypeId();
+				
+				debug( "change to ["+_typeId+"]");
+				dispatchEvent( new Event( Event.CHANGE));
+			}
+
+			protected function selectTopDown( children:XMLList, level:int=0, data:String=null):void {
+				
+				if ( level >= selectLevels.length) return;
+				
+				var selector:ListBase = ListBase( selectLevels[ level]);
+				
+				if ( level > 0 || ((selector == null) ? false : (selector.dataProvider == null))) {
+					if ( children != null && children.length() > 0) {
+						selector.dataProvider = new XMLListCollection( children);
+						selector.enabled = true;
+					} else {
+						selector.dataProvider = nodata;
+						selector.enabled = false;
+					}
+				}
+				
+				var selNode:XML;	// = selector.selectedItem; 
+				if ( data != null) {
+					var match:String = data.substr( 0, 2+level*2);
+					var xNode:XMLList = children.(attribute("data")==match);
+					
+					if ( xNode.length() > 0) {
+						selNode = xNode[0];
+						if ( selNode != null) {
+							if ( selector != null) selector.selectedItem = selNode;
+//							debug( "  set["+level+"] ["+selNode.@name+"] ["+selNode.@data+"] ["+match+"]");
+							
+							if ( selNode.@data == data) _selectedNode = selNode;
+						}
+					}
+				}
+				
+				if ( selNode == null) selNode = children[0];
+				
+//				debug( "set["+level+"] ["+XML(selector.selectedItem).@name+"]");
+				
+				if ( level+1 < selectLevels.length) selectTopDown((selNode != null) ? selNode.* : null, level+1, data);
+				else _uiMatches = true;
+			}
+
+			protected function debug( s:String):void {
+//				trace( this.className+": "+s);
+			}			
+			
+		]]>
+	</fx:Script>
+	<s:Label id="lTitle" paddingTop="4" text="Typ:" styleName="spinnerLabel"/>
+</s:VGroup>

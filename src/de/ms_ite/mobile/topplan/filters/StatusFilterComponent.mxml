@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 xmlns:ns="de.ms_ite.mobile.topplan.components.*" 
+		 xmlns:ns1="de.ms_ite.mobile.topplan.selectors.*" 
+		 implements="de.ms_ite.mobile.topplan.filters.FilterSpec"
+		 backgroundAlpha="0.6" borderWeight="1"
+		 cornerRadius="5" horizontalCenter="0" verticalCenter="0"
+		 creationComplete="initUI(event)">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import models.SignsProject;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.events.ListEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+			
+			protected var _actions:ArrayCollection = new ArrayCollection();
+			protected var _states:ArrayCollection = new ArrayCollection();
+			
+			protected function initUI(event:Event):void {
+				findSelected();
+			}
+			
+			public function active():Boolean {
+				return lActions.selectedItems.length > 0  || lStates.selectedItems.length > 0;
+			}
+			
+			public function reset():void {
+				lActions.selectedItems = null;
+				lStates.selectedItems = null;
+			}
+			
+			protected function getStates():void {
+				_states.removeAll();
+				_states.addAll( AppSettings.getStatus());
+			}
+			
+			protected function getActions():void {
+				_actions.removeAll();
+				_actions.addAll( AppSettings.getActions());
+			}
+			
+			public function get statusFilter():Array {
+				return dataList( lStates.selectedItems);
+			}
+			public function get statusModeLatest():Boolean {
+				return tsLatestState.selected;
+			}
+			
+			public function get actionFilter():Array {
+				return dataList( lActions.selectedItems);
+			}
+			public function get actionModeLatest():Boolean {
+				return tsLatestAction.selected;
+			}
+			
+			protected function dataList( sel:Vector.<Object>):Array {
+				var res:Array = new Array();
+				
+				for each( var o:Object in sel) {
+					res.push( o.data);
+				}
+				
+				return res;
+			}
+			
+			protected function findSelected():void {
+				
+				if ( _actions == null || _actions.length == 0) getActions();
+				if ( _states == null || _states.length == 0) getStates();				
+			}
+			
+			protected function handleChange( event:Event):void {
+				dispatchEvent( new Event( Event.CHANGE, true));
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}						
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:Label text="Aktionen filtern"/>
+		<s:Spacer width="100%"/>
+		<s:Label text="aktuell"/>
+		<s:ToggleSwitch id="tsLatestAction" selected="true" change="handleChange( event);"/>
+	</s:HGroup>
+	<s:List id="lActions" allowMultipleSelection="true" itemRenderer="de.ms_ite.mobile.topplan.renderer.FilterStatusRenderer" labelField="label" width="100%" dataProvider="{_actions}" change="handleChange( event);">
+		<s:layout>
+			<s:TileLayout orientation="rows" columnWidth="150" requestedColumnCount="4" requestedRowCount="2"/>
+		</s:layout>
+		<!-- s:itemRenderer>
+			<fx:Component>
+				<s:LabelItemRenderer styleName="projectItem" width="100%"/>
+			</fx:Component>
+		</s:itemRenderer -->
+	</s:List>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:Label text="Status filtern"/>
+		<s:Spacer width="100%"/>
+		<s:Label text="aktuell"/>
+		<s:ToggleSwitch id="tsLatestState" selected="true" change="handleChange( event);"/>
+	</s:HGroup>
+	<s:List id="lStates" allowMultipleSelection="true" itemRenderer="de.ms_ite.mobile.topplan.renderer.FilterStatusRenderer" labelField="label" width="100%" dataProvider="{_states}" change="handleChange( event);">
+		<s:layout>
+			<s:TileLayout orientation="rows" columnWidth="150" requestedColumnCount="4" requestedRowCount="3"/>
+		</s:layout>
+		<!-- s:itemRenderer>
+			<fx:Component>
+				<s:LabelItemRenderer styleName="projectItem" width="100%"/>
+			</fx:Component>
+		</s:itemRenderer -->
+	</s:List>
+</s:BorderContainer>

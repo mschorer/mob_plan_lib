@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  xmlns:ns="de.ms_ite.mobile.topplan.components.*"
+		  width="100%" height="100%" minWidth="300" creationComplete="initUI(event)"
+		  horizontalAlign="left">
+	<!-- s:layout>
+		<s:VerticalLayout/>
+	</s:layout -->
+	<fx:Metadata>
+		[Event(name="complete", type="flash.events.Event")]
+	</fx:Metadata>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import models.SignsOwner;
+			import models.SignsTag;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			protected static var _owners:ArrayCollection;
+			
+			protected function initUI(event:FlexEvent):void {
+				if ( _owners == null) {
+					var ownr:SignsOwner = new SignsOwner();
+					
+					_owners = ownr.list();
+					if ( lTags != null) lTags.dataProvider = _owners;
+				}
+			}
+			
+			protected function submit(event:MouseEvent):void {
+				dispatchEvent( new Event( Event.COMPLETE));
+			}
+		]]>
+	</fx:Script>
+	<s:BorderContainer width="100%" height="100%" backgroundAlpha="0.6" backgroundColor="0xf0f0f0" borderWeight="1"
+					   cornerRadius="5" horizontalCenter="0" verticalCenter="0">
+		<s:layout>
+			<s:VerticalLayout gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2"
+							  paddingTop="2" verticalAlign="middle"/>
+		</s:layout>
+		<s:List id="lTags" width="100%" height="100%" click="submit(event)"
+				allowMultipleSelection="true" styleName="ownerSelectItem"
+				horizontalScrollPolicy="off"
+				itemRenderer="de.ms_ite.mobile.topplan.renderer.FilterTagRenderer" labelField="name"
+				pageScrollingEnabled="false" scrollSnappingMode="none">
+			<s:layout>
+				<s:TileLayout orientation="rows" requestedColumnCount="4" requestedRowCount="10"/>
+			</s:layout>
+		</s:List>
+	</s:BorderContainer>
+</s:VGroup>

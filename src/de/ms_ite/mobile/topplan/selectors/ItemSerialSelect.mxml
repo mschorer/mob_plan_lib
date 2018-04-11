@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:HGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark"
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 creationComplete="initUI(event)">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import spark.collections.NumericDataProvider;
+			import spark.components.SpinnerList;
+			import spark.components.SpinnerListContainer;
+			import spark.components.TextInput;
+			import spark.events.IndexChangeEvent;
+
+			protected var _serial:String;			
+			protected var _dataProvider:NumericDataProvider;
+			
+			protected var _spinners:Array;
+			protected var _textInput:TextInput;
+			
+			protected var _minorDigits:int = 4;
+			protected var _minorFill:String = '0000';
+			
+			protected function initUI( evt:Event):void {
+				//				debug( "initUI");				
+				
+				if ( _serial != null) serial = _serial;
+			}
+			
+			override protected function createChildren():void {
+				
+				_dataProvider = new NumericDataProvider();
+				_dataProvider.minimum = 0;
+				_dataProvider.maximum = 9;
+				
+				if ( AppSettings.isDesktop) {
+			
+					_textInput = new TextInput();
+					_textInput.restrict = "mM0-9";
+					_textInput.maxChars = _minorDigits;
+					_textInput.widthInChars = _minorDigits;
+					
+//					_textInput.addEventListener( Event.CHANGE, handleEdit);
+					_textInput.addEventListener( FocusEvent.FOCUS_IN, focusIn);
+					_textInput.addEventListener( FocusEvent.FOCUS_OUT, focusOut);
+					
+					addElement( _textInput);
+				} else {
+					var dlc:SpinnerListContainer = new SpinnerListContainer();
+					dlc.percentWidth = 100;
+					dlc.height = 140;
+					
+					addElement( dlc);
+
+					_spinners = new Array();
+					for ( var i:int = 0; i < _minorDigits; i++) {
+						var spl:SpinnerList = new SpinnerList();
+						spl.percentWidth = 100 / _minorDigits;
+						spl.addEventListener( Event.CHANGE, selectionChanged);
+						spl.dataProvider = _dataProvider;
+						
+						dlc.addElement( spl);
+						_spinners.push( spl);
+					}					
+				}
+				
+				super.createChildren();
+			}
+
+			public function set serial( tm:String):void {
+				var ioff:int = 0;
+				
+				_serial = tm;
+
+				if ( _textInput != null) {
+					_textInput.text = ( _serial != null) ? _minorFill.substr( _serial.length)+_serial : '';
+				} else {
+					var es:String = zeroFill( _serial);
+					for( var i:int = 0; i < _minorDigits; i++) {
+						var sp:SpinnerList = SpinnerList( _spinners[i]);
+						
+						sp.selectedIndex = ( _serial != null && es.length > (_minorDigits - 1 -i)) ? parseInt( es.charAt( i)) : 0;
+					}
+				}
+			}
+			
+			protected function zeroFill( s:String):String {
+				return ( s != null) ? (_minorFill.substr( s.length)+s) : _minorFill;
+			}
+			
+			public function get serial():String {
+				return zeroFill( _serial);
+			}
+			
+			protected function handleEdit( evt:Event):void {
+				_textInput.text = zeroFill( _textInput.text);				
+			}
+			
+			protected function focusIn( evt:FocusEvent):void {
+				
+				var val:Number = parseInt( _textInput.text);
+				if ( ! isNaN( val)) _textInput.text = ''+val;  
+			}
+			
+			protected function focusOut( evt:FocusEvent):void {
+				_serial = _textInput.text = zeroFill( _textInput.text);				
+			}
+			
+			protected function selectionChanged( event:IndexChangeEvent):void {
+				var s:String = '';
+				
+				for( var i:int = 0; i < _minorDigits; i++) {
+					var sp:SpinnerList = SpinnerList( _spinners[i]);
+					s += sp.selectedIndex;
+				}
+				
+				_serial = s;
+			}
+		]]>
+	</fx:Script>
+</s:HGroup>

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:HGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+						xmlns:s="library://ns.adobe.com/flex/spark"
+						currentState="online" show="activate(event)">
+	<s:states>
+		<s:State name="online"/>
+		<s:State name="offline"/>
+	</s:states>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.popups.TagPopup;
+			
+			import models.SignsItem;
+			import models.SignsTag;
+			import models.SignsTagMap;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.events.CollectionEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+									
+			protected var _item:SignsItem;
+			protected var _tagModel:SignsTag;
+			protected var tagPopup:TagPopup;
+			
+			protected var _item_tags:ArrayCollection;
+						
+			public function get item():SignsItem {
+				return _item;
+			}
+			
+			public function set item( i:SignsItem):void {
+				_item = i;
+				bSelect.enabled = (_item.cache_id >= 0);
+			}
+			
+			public function set tagMap( ac:ArrayCollection):void {
+				if ( _item_tags != null) _item_tags.removeEventListener( CollectionEvent.COLLECTION_CHANGE, tagMapChanged);
+				_item_tags = ac;
+				_item_tags.addEventListener( CollectionEvent.COLLECTION_CHANGE, tagMapChanged);
+
+				updateTagView();
+			}
+			
+			public function get tagMap():ArrayCollection {
+				return _item_tags;
+			}			
+
+			protected function tagMapChanged( evt:CollectionEvent):void {
+				updateTagView();
+			}
+			
+			public function updateTagView( lst:ArrayCollection=null):void {
+				if ( lst != null) _item_tags = lst;
+				
+				_tagModel = null;
+				
+				var iconTypeCount:int = 0;
+				var tags:String = "";
+				if ( _item_tags.length > 0) {
+					debug( "tags #"+_item_tags.length);
+					
+					for( var i:int = 0; i < _item_tags.length; i++) {
+						var it:SignsTagMap = _item_tags.getItemAt( i) as SignsTagMap;
+						
+						var ic:SignsTag = SignsTag( AppSettings.tagList.getItemAt( AppSettings.tagIndexById( it.cache_tag_id)));
+						iconTypeCount++;
+						
+						debug( "  tag: "+(it.deleted ? '-' : '+')+" / "+it.sort+" ["+ic.name+"]");
+						
+						if ( ! it.deleted) tags += "["+ic.name+"]";
+					}
+				} else {
+					//					debug( "  no icons ["+_linkageType+"]");					
+				}
+				bSelect.label = "Tags wählen ... "+(( iconTypeCount > 0) ? '#'+iconTypeCount : '')+" "+tags;
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			protected function activate(event:Event):void {
+				switchState();
+			}
+			
+			public function switchState():void {
+				currentState = AppSettings.online ? 'online' : 'offline';
+				debug( "mode: "+currentState);
+			}
+			
+			protected function tagSelectOpen(event:MouseEvent):void {
+				if ( tagPopup == null) {
+					tagPopup = new TagPopup();
+					
+					tagPopup.addEventListener( Event.COMPLETE, tagSelect);					
+				}
+				tagPopup.item = _item;
+				tagPopup.tagMap = _item_tags;
+				
+				if ( !tagPopup.isOpen) tagPopup.open( DisplayObjectContainer( this.parentApplication), true);
+				PopUpManager.centerPopUp( tagPopup);
+
+//				tagPopup.preset( _item);				
+			}
+			
+			protected function tagSelect(event:Event):void {
+				// TODO Auto-generated method stub
+				debug( "tags saved");
+			}
+
+			protected function debug( s:String):void {
+//				trace( this.name+": "+s);
+			}						
+		]]>
+	</fx:Script>
+	<s:Button id="bSelect" width="100%" label="Tags wählen ..." click="tagSelectOpen( event)"
+			  label.online="Tags wählen ..."/>
+</s:HGroup>

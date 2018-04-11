@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		contentCreationComplete="initUI(event)"
+		xmlns:ns="de.ms_ite.mobile.*" xmlns:ns1="de.ms_ite.mobile.topplan.components.*" xmlns:ns2="de.ms_ite.mobile.topplan.selectors.*">
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<fx:Declarations>
+		<s:DateTimeFormatter id="fmt" dateTimePattern="yyyyMMdd_HHmmss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.callouts.ImageCallout;
+			import de.ms_ite.mobile.topplan.components.ImageFileSelector2;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import flash.data.SQLResult;
+			
+			import models.Model;
+			import models.SignsAction;
+			import models.SignsItem;
+			import models.SignsModel;
+			import models.SignsUser;
+			import models.StatusModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.components.TextArea;
+			import spark.components.TextInput;
+			import spark.events.IndexChangeEvent;
+			import spark.events.ListEvent;
+
+			private var dataSource:IDataInput;
+			
+			protected var ifs:ImageFileSelector2;
+			
+			protected var tiName:TextInput;
+			protected var taDescription:TextArea;
+
+			protected var _action:SignsAction;
+			protected var _saveEvent:TopEvent;
+
+			protected var _item:SignsItem;
+			
+			protected var fCamera:Boolean = false;
+			protected var fCamroll:Boolean = false;
+			protected var fBrowse:Boolean = true;
+			
+			protected function initUI( event:Event):void {
+				debug( "initUI");
+				
+//				spStatus.dataProvider = AppSettings.getStatus();
+//				spAction.dataProvider = AppSettings.getActions();
+				
+				presetControls();
+			}
+			
+			protected function presetDependent():Boolean {
+				if ( _item == null)  _item = new SignsItem();
+				if ( _item.cache_id != _action.cache_item_id) {
+					_item.cache_id = _action.cache_item_id;
+					
+					var resp:Responder = null;
+					if ( Model.asyncMode) resp = new Responder( asyncItem, _item.defaultSqlErrorResponder);
+					
+					return _item.load( resp);
+				}
+				
+				return true;
+			}
+			
+			protected function asyncItem( sqe:SQLResult): void {
+				_item.loadResult( sqe);
+				debug( "loaded.");
+				presetControls();
+			}
+			
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				debug( "set data ["+dest+"]");
+				
+				if ( dest != _action) {
+					if ( dest is SignsAction) _action = SignsAction( dest);
+					else _action = new SignsAction( dest);
+
+					if ( presetDependent() && ( atsActionStatus != null)) presetControls();
+				}
+
+				fCamera = (_action != null && CameraUI.isSupported);
+				fCamroll = (_action != null && CameraRoll.supportsBrowseForImage);				
+			}
+			
+			override public function get data():Object {
+				return _action;
+			}
+			
+			protected function presetControls():void {
+				
+				if ( atsActionStatus == null || _action == null) return;
+				
+				atsActionStatus.actionID = _action.type;
+				atsActionStatus.statusID = _action.status;
+				
+				if ( tiName != null) {
+					gItems.removeElement( tiName);
+					tiName = null;
+				}
+				if ( tiName == null) {
+					tiName = new spark.components.TextInput();
+					tiName.percentWidth = 100;
+					gItems.addElement( tiName);
+				}
+				tiName.text = _action.name;
+				
+				if ( taDescription != null) {
+					gItems.removeElement( taDescription);
+					taDescription = null;
+				}
+				if ( taDescription == null) {
+					taDescription = new spark.components.TextArea();
+//					taDescription.percentHeight = 100;
+					taDescription.percentWidth = 100;
+//					taDescription.minHeight = 60;
+					taDescription.heightInLines = 2;
+					
+					gItems.addElement( taDescription);
+				}
+				taDescription.text = _action.description;
+				
+				dsEStatus.master = _item.type.toString( 16).toLowerCase();
+				dsEStatus.value = -1;
+				
+				iPreview.source = ( _action.cache_url != null) ? _action.cache_url : _action.url;
+			}
+			
+			protected function handleActionStatusChange( evt:Event):void {
+				debug( "chg ["+atsActionStatus.actionID+":"+atsActionStatus.statusID+"]");
+			}
+			
+			//===========================================================================================================
+			
+			public function itemBrowseForFile( evt:MouseEvent):void {
+				prepIFS();
+				ifs.itemBrowseForFile( _item, this, false);
+			}
+			
+			public function itemSelectCameraRoll( evt:MouseEvent):void {
+				prepIFS();
+				ifs.itemSelectCameraRoll( _item, this, false);
+			}
+			
+			public function itemDoSnapshot( evt:MouseEvent):void {
+				prepIFS();			
+				ifs.itemDoSnapshot( _item, this, false);
+			}
+			
+			protected function prepIFS():void {
+				if ( ifs == null) {
+					ifs = new ImageFileSelector2();
+					ifs.addEventListener( TopEvent.ITEM_ATTACHED, mediaAttached);
+				}
+			}
+			
+			protected function mediaAttached( evt:TopEvent):void {
+				_action.url = evt.url;
+				_action.cache_url = evt.cache_url;
+				
+				iPreview.source = evt.cache_url;
+				
+				debug( "file attached ["+_action+"]");
+			}
+			
+			//===========================================================================================================
+
+			public function doSave( evt:Event):void {
+				
+				var tu:SignsUser = AppSettings.getUser();
+				_action.user_id = tu.id;
+				_action.cache_user_id = tu.cache_id;
+				
+				_action.cache_project_id = AppSettings.currentProject.cache_id;
+				_action.project_id = AppSettings.currentProject.id;
+				
+				_action.type = atsActionStatus.actionID;
+				_action.status = atsActionStatus.statusID;
+				_action.estatus = dsEStatus.value;
+				
+				_action.name = tiName.text;
+				_action.description = taDescription.text;
+				
+				debug( "save ["+_action.toString()+"]");
+				
+				_saveEvent = new TopEvent( TopEvent.ITEM_ACTION);
+				
+				if ( AppSettings.online) {
+					_action.callService( 'save', actionSavedConnected, faultHandler);
+				} else {
+					_action.cache_modified = new Date();
+
+					debug( "saving action ["+_action+"]");
+					if ( Model.asyncMode) {
+						var resp:Responder = new Responder( actionSavedAsync, _action.defaultSqlErrorResponder);
+						_action.save( resp);					
+					} else {
+						_action.save( );					
+						actionSaved();
+					}
+				}
+			}
+
+			protected function actionSavedAsync( sqe:SQLResult):void {
+				var b:Boolean = _action.saveResult( sqe);
+				debug( "action saved async.");
+				actionSaved();
+			}
+			
+			protected function actionSavedConnected( evt:ResultEvent, token:Object):void {
+				
+				var res:Array = evt.result as Array;
+				var status:StatusModel = new StatusModel( res[0]); 
+
+				_action.modified = status.modified;
+
+				if ( _action.state == SignsModel.STATE_NEW) _action.id = status.id;
+
+				actionSaved();
+			}
+			
+			protected function actionSaved():void {
+				debug( "saved action ["+_saveEvent.type+"] ["+_action+"]");
+				dispatchEvent( _saveEvent);
+				_saveEvent = null;					
+			}
+
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+
+				dispatchEvent( new TopEvent( TopEvent.ITEM_ACTION_ERROR));
+			}
+	
+			//===========================================================================================================
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+		]]>
+	</fx:Script>
+	<s:Scroller width="100%" minWidth="550" height="100%" horizontalScrollPolicy="off">
+		<s:Group id="gItems" width="100%">
+			<s:layout>
+				<s:VerticalLayout gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+			</s:layout>
+			<s:HGroup id="hgItems" width="100%" gap="2">
+				<s:VGroup width="100%" gap="5">
+					<!-- s:SpinnerListContainer width="100%" height="140">
+						<s:SpinnerList id="spStatus" height="100%" width="50%" wrapElements="false"/>
+						<s:SpinnerList width="20" height="100%" enabled="false" labelField="name"
+									   selectedIndex="1">
+							<s:ArrayList>
+								<fx:Object name="-" data="-1"></fx:Object>
+							</s:ArrayList>
+						</s:SpinnerList>
+						<s:SpinnerList id="spAction" height="100%" width="50%" wrapElements="false"/>
+					</s:SpinnerListContainer -->
+					<ns2:ActionTypeSelector id="atsActionStatus" width="100%" change="handleActionStatusChange( event)"/>
+					<ns2:DependentSelector id="dsEStatus" width="100%" minWidth="100"
+										   data="{AppSettings.actionEStatusXML}"/>
+				</s:VGroup>
+				<s:VGroup height="100%" gap="4" paddingBottom="1" paddingLeft="1" paddingRight="1"
+						  paddingTop="1" verticalAlign="bottom">
+					<s:BorderContainer id="locationView" backgroundAlpha="0.6" backgroundColor="0xf0f0f0"
+									   borderWeight="1" cornerRadius="5"
+									   horizontalCenter="0" verticalCenter="0">
+						<s:layout>
+							<s:VerticalLayout paddingBottom="3" paddingLeft="3" paddingRight="3" paddingTop="3"/>
+						</s:layout>
+						<s:Image id="iPreview" width="100" height="75" horizontalCenter="0" scaleMode="letterbox"
+								 smooth="true" verticalCenter="0"/>
+					</s:BorderContainer>
+					<s:Spacer width="100%" height="100%"/>
+					<s:VGroup width="100%" height="100%" horizontalAlign="left">
+						<s:Label styleName="inputLabel" text="Attach:"/>
+						<s:Button id="bPhoto" label="Photo" enabled="{fCamera}" width="100%" click="itemDoSnapshot( event);"/>
+						<s:Button id="bRoll" label="Image" enabled="{fCamroll}" width="100%" click="itemSelectCameraRoll( event);"/>
+						<s:Button id="bFile" label="File" enabled="{fBrowse}" width="100%" click="itemBrowseForFile( event);"/>
+					</s:VGroup>
+				</s:VGroup>
+			</s:HGroup>
+			<!-- s:TextInput id="tiName" width="100%"/>
+			<s:TextArea id="taDescription" width="100%" height="80" heightInLines="2"/ -->
+		</s:Group>	
+	</s:Scroller>
+</s:View>

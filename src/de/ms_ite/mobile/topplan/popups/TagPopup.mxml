@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:SkinnablePopUpContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark"
+						   xmlns:ns="de.ms_ite.mobile.topplan.components.*"
+						   creationComplete="initUI(event)" open="handleOpen(event)" close="handleClose( event);"
+						   width="90%" height="90%" xmlns:ns1="de.ms_ite.mobile.topplan.filters.*">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.TagWrapper;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import flash.data.SQLResult;
+			
+			import models.Model;
+			import models.RetrievalParameters;
+			import models.SignsAction;
+			import models.SignsItem;
+			import models.SignsTag;
+			import models.SignsTagMap;
+			import models.SignsUser;
+			import models.StatusModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.PopUpEvent;
+
+			protected var _item_tags:ArrayCollection;
+			protected var changeQueue:Array;
+
+			protected var _tagMapModel:SignsTagMap;			
+			protected var _itemModel:SignsItem;
+			
+			protected function initUI(event:FlexEvent):void {
+//				presetTags( _itemModel);
+			}
+			
+			protected function handleOpen(event:PopUpEvent):void {
+				// TODO Auto-generated method stub
+				debug( "initUI");
+				
+				if ( tfc.tagMap != _item_tags) tfc.tagMap = _item_tags;
+				tfc.attachFilter();	
+			}
+			
+			public function set tagMap( ac:ArrayCollection):void {
+				_item_tags = ac;
+				if ( tfc != null) tfc.tagMap = ac;
+			}
+			
+			public function get tagMap():ArrayCollection {
+				return _item_tags;
+			}			
+/*			
+			protected function presetTags( im:SignsItem):void {
+
+				unmarkTags();
+				
+				if ( _itemModel == null) return;
+
+				if ( tfc == null) return;
+				
+				if ( _tagMapModel == null) _tagMapModel = new SignsTagMap();
+				
+				var sp:RetrievalParameters = new RetrievalParameters( { cache_item_id:im.cache_id});
+				tfc.tagMap = _tagMapModel.list( sp);
+			}
+			
+			public function preset( om:SignsItem):void {
+				_itemModel = om;
+				presetTags( _itemModel);
+			}
+*/			
+			public function set item( ow:SignsItem):void {
+				_itemModel = ow;
+//				presetTags( _itemModel);
+			}
+
+			protected function commitTags():Boolean {
+				debug( "commit:");
+				
+				var chg:Boolean = false;
+				
+				var plus:Array = new Array();
+				var enable:Array = new Array();
+				var disable:Array = new Array();
+				var nochange:Array = new Array();
+				changeQueue = new Array();
+
+				if ( _item_tags != null) _item_tags.removeAll();
+				else _item_tags = new ArrayCollection();
+
+				for( var i:int = 0; i < tfc.tagList.length; i++) {
+					var tw:TagWrapper = TagWrapper( tfc.tagList.getItemAt( i));
+					
+					if ( tw.changed) {
+						if ( tw.mapItem == null) {
+							var tmi:SignsTagMap = new SignsTagMap();
+							
+							tmi.cache_item_id = _itemModel.cache_id;
+							if ( _itemModel.id >= 0) tmi.item_id = _itemModel.id;
+							
+							tmi.cache_tag_id = tw.item.cache_id;
+							if ( tw.item.id >= 0) tmi.tag_id = tw.item.id;
+							
+							tmi.sort = 0;
+							tmi.cache_modified = new Date();
+							
+							if ( Model.asyncMode) {
+								if ( changeQueue.length == 0) {
+									var resp:Responder = new Responder( unqueueTagTags, tmi.defaultSqlErrorResponder);
+									tmi.save( resp);
+								}
+								changeQueue.push( tmi);
+							} else {
+								tmi.save();						
+							}
+							plus.push( tw.item.name);
+							debug( "  add tag ["+tw.item.name+"] "+tmi.toString());
+							
+							_item_tags.addItem( tmi);
+						} else {
+							var tmiu:SignsTagMap = tw.mapItem as SignsTagMap;
+							
+							if ( tw.selected) {
+								debug( "  mark enabled ["+tw.item.name+"]");
+								enable.push( tw.item.name);
+								tmiu.deleted = false;
+							} else {
+								debug( "  mark deleted ["+tw.item.name+"]");
+								disable.push( tw.item.name);
+								tmiu.deleted = true;
+							}
+							tmiu.cache_modified = new Date();
+							
+							debug( "  save: "+tmiu);
+							
+							if ( Model.asyncMode) {
+								if ( changeQueue.length == 0) {
+									var resp:Responder = new Responder( unqueueTagTags, tmiu.defaultSqlErrorResponder);
+									tmiu.save( resp);
+								}
+								changeQueue.push( tmiu);
+							} else {
+								tmiu.save();						
+							}
+
+							_item_tags.addItem( tmiu);
+						}
+						chg = true;
+					} else {
+						if ( tw.mapItem != null) {
+							nochange.push( tw.item.name);
+							_item_tags.addItem( tw.mapItem);
+						}
+					}
+				}
+				
+				if ( chg) {
+					var msg:String = "";
+					if ( plus.length > 0) msg += "*[ "+plus.join( ", ")+"]\n";
+					if ( enable.length > 0) msg += "+[ "+enable.join( ", ")+"]\n";
+					if ( disable.length > 0) msg += "-[ "+disable.join( ", ")+"]\n";
+					if ( nochange.length > 0) msg += "=[ "+nochange.join( ", ")+"]\n";
+					
+					logTagChange( _itemModel, msg);
+				}
+				
+				return (changeQueue.length > 0)
+			}
+			
+			protected function unqueueTagTags( sqe:SQLResult):void {
+				var im:SignsTagMap = changeQueue.shift() as SignsTagMap;
+				im.saveResult( sqe);
+				
+				if ( changeQueue.length > 0) {
+					var im:SignsTagMap = changeQueue[0] as SignsTagMap;
+					var resp:Responder = new Responder( unqueueTagTags, im.defaultSqlErrorResponder);
+					im.save( resp);
+					debug( "  tq save "+im.toString());
+				} else {
+					debug( "tq done.");
+					tagChangeDone();
+				}
+			}
+			
+			protected function unmarkTags():void {
+				debug( "unmark all.");
+				if ( tfc != null) tfc.unmarkTags();
+			}
+			
+			protected function handleClose( evt:Event):void {
+				debug( "close");
+				close( true);
+			}
+			
+			protected function saveChanges(event:Event):void {
+				debug( "submit");
+				var rc:Boolean = commitTags();
+				
+				if ( ! rc) tagChangeDone();
+			}
+			
+			protected function tagChangeDone():void {
+				close( true);
+				callLater( sendComplete);
+			}
+			
+			protected function sendComplete():void {
+				dispatchEvent( new Event( Event.COMPLETE));
+			}
+			
+			protected function logTagChange( item:SignsItem, msg:String):void {
+				var action:SignsAction = new SignsAction( {	item_id:item.id, cache_item_id:item.cache_id, type:AppSettings.ACTION_EDIT, status:AppSettings.STATUS_NOP, name:'Change tags', description:msg});
+				logItemAction( action);
+			}
+			
+			//===========================================================================================================
+			
+			public function logItemAction( action:SignsAction):void {
+				
+				var tu:SignsUser = AppSettings.getUser();
+				action.user_id = tu.id;
+				action.cache_user_id = tu.cache_id;
+				
+				action.cache_project_id = AppSettings.currentProject.cache_id;
+				action.project_id = AppSettings.currentProject.id;
+				
+				debug( "save item action ["+action.item_id+"] ["+action.toString()+"]");
+				
+				if ( AppSettings.online) {
+					action.callService( 'save', actionSaved, faultHandler);
+				} else {
+					action.cache_modified = new Date();
+					
+					debug( "saving item action ["+action+"]");					
+
+					if ( Model.asyncMode) {
+						var resp:Responder = new Responder( actionSavedAsync, action.defaultSqlErrorResponder);
+						action.save( resp);
+					} else {
+						action.save();						
+					}
+				}
+			}
+			
+			protected function actionSavedAsync( evt:SQLResult):void {
+				debug( "item action saved async.");
+			}
+			
+			protected function actionSaved( evt:ResultEvent, token:Object=null):void {
+				
+				var res:Array = evt.result as Array;
+				var item:StatusModel = new StatusModel( res[0]);
+
+				debug( "saved item action remote ["+item+"]");
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+				
+				dispatchEvent( new TopEvent( TopEvent.ITEM_SAVE_ERROR));
+			}
+			
+			//===========================================================================================================
+
+			protected function debug( txt:String):void {
+				trace( this.className+": "+txt);
+			}
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	<s:TitleWindow id="tw" title="Set tags ..." width="100%" height="100%" close="handleClose(event)">
+		<s:layout>
+			<s:VerticalLayout gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2"
+							  paddingTop="2"/>
+		</s:layout>
+		<ns1:TagFilterComponent id="tfc" submitLabel="Save" complete="saveChanges( event)" width="100%" height="100%"/>
+	</s:TitleWindow>
+</s:SkinnablePopUpContainer>

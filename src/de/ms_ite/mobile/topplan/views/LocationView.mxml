@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009"
+		 xmlns:s="library://ns.adobe.com/flex/spark"
+		 xmlns:mx="library://ns.adobe.com/flex/mx">
+	<s:layout>
+		<s:HorizontalLayout verticalAlign="middle"/>
+	</s:layout>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.ILocationProvider;
+			
+			import spark.components.View;
+			
+			import de.ms_ite.mobile.topplan.callouts.LocationEditCallout;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.GpsPos;
+			import models.SignsItem;
+			import models.SignsLocation;
+			import models.SignsModel;
+			import models.StatusModel;
+			
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.components.SplitViewNavigator;
+			import spark.components.ViewNavigator;
+			
+			protected var _location:SignsLocation;
+			protected var _locSave:SignsLocation;
+			
+			protected var cLocationEdit:LocationEditCallout;
+
+			public function set location( loc:SignsLocation):void {
+				
+				if ( loc != _location) {
+					if ( loc is SignsLocation) _location = SignsLocation( loc);
+					else _location = new SignsLocation( loc);
+				}
+				
+				format();
+			}
+			
+			public function get location():SignsLocation {
+				return _location;
+			}
+			
+			protected function format():Boolean {
+				if ( _location == null) return false;
+				
+				debug( "set data ["+_location.id+"/"+_location.cache_id+"] ["+_location.state+"] ["+_location.tag_major+"."+_location.tag_minor+"]");
+				
+				lLocName.text = _location.name;
+				
+				lType.text = ""+_location.type;
+				
+				tag_major.text = _location.tag_major;
+				tag_minor.text = '000'.substr( 0, 3-String(_location.tag_minor).length)+_location.tag_minor;
+				
+				if ( _location.state != SignsModel.STATE_NEW) return true;
+				else {
+					editLocation( _location, locationView);
+					
+					return false;
+				}
+			}
+			
+			//-------------------------------------------------------------------------------
+			
+			public function saveCurrentLocation( loc:SignsLocation):void {
+				debug( "reposition loc.");
+				
+				debug( "save ["+loc.toString()+"]");
+				
+				_locSave = loc;
+				//				_location.callService( 'saveLocation', locSaved, faultHandler);
+				
+				if ( AppSettings.online) {
+					loc.callService( 'save', locSaved, faultHandler);
+				} else {
+					var chg:TopEvent;
+					
+					if ( loc.state == SignsModel.STATE_NEW) chg = new TopEvent( TopEvent.LOCATION_ADD);
+					else chg = new TopEvent( TopEvent.LOCATION_SAVED);
+					
+					loc.cache_modified = new Date();
+					
+					loc.save();					
+					debug( "saved location ["+loc+"]");
+					
+					dispatchEvent( chg);
+				}
+			}
+			
+			protected function locSaved( evt:ResultEvent, token:Object):void {
+				
+				var res:Array = evt.result as Array;
+				var status:StatusModel = new StatusModel( res[0]); 
+				//				var id:String = res[0].id;
+				
+				var chg:TopEvent;
+				
+				if ( _locSave.state == SignsModel.STATE_NEW) {
+					_locSave.id = status.id;
+					
+					chg = new TopEvent( TopEvent.LOCATION_ADD);
+				} else {
+					chg = new TopEvent( TopEvent.LOCATION_SAVED);
+				}
+				
+				debug( "saved location ["+chg.type+"] #"+res.length+" ["+_locSave+"]");
+				dispatchEvent( chg);
+			}
+			
+			
+			//-------------------------------------------------------------------------------
+			
+			protected function handleLocationEdit( evt:Event):void {
+				debug( "editLoc: "+_location);
+				
+				if ( _location != null) editLocation( _location, locationView);
+			}
+			
+			protected function prepLocationEdit():void {
+				if ( cLocationEdit == null) {
+					cLocationEdit = new LocationEditCallout();
+					
+					cLocationEdit.addEventListener( TopEvent.LOCATION_SAVE_ERROR, handleLocationCancel);
+					cLocationEdit.addEventListener( TopEvent.LOCATION_SAVED, handleLocationSave);
+					cLocationEdit.addEventListener( TopEvent.LOCATION_ADD, handleLocationAdd);
+				}
+			}
+			
+			protected function editLocation( loc:SignsLocation, dParent:DisplayObjectContainer=null):void {
+				
+				if ( loc == null) return;
+				
+				prepLocationEdit();
+				cLocationEdit.data = loc;
+				
+				if ( cLocationEdit.isOpen) cLocationEdit.close( false);
+				
+				cLocationEdit.open( dParent, false);
+			}
+			
+			public function addLocation(event:MouseEvent):void {
+				debug( "add location.");
+				
+				var loc:SignsLocation = new SignsLocation();
+				var pos:GpsPos = ILocationProvider( SplitViewNavigator( ViewNavigator( View( this.parent).navigator).parentNavigator).parentDocument).geoLocation;
+				
+				loc.location = pos.location;
+				loc.accuracy = loc.accuracy;
+				
+				editLocation( loc, locationView);
+			}
+			
+			protected function handleLocationCancel( evt:Event):void {
+				debug( "cancel locSave.");
+			}
+			
+			protected function handleLocationSave( evt:Event):void {
+				debug( " loc ["+evt.type+"] "+_location);
+				
+				_location = SignsLocation( cLocationEdit.data);
+				format();
+				
+				dispatchEvent( new TopEvent( evt.type, true));
+				//					if ( evt.type == BaseModel.STATE_NEW) lItems.dataProvider.addItem( cItemEdit.data);
+				//					lItems.dataProvider.itemUpdated( item);
+			}
+			
+			protected function handleLocationAdd( evt:Event):void {
+				debug( " loc ["+evt.type+"] "+_location);
+				
+				_location = SignsLocation( cLocationEdit.data);
+				format();
+				dispatchEvent( new TopEvent( evt.type, true));
+				//					if ( evt.type == BaseModel.STATE_NEW) lItems.dataProvider.addItem( cItemEdit.data);
+				//					lItems.dataProvider.itemUpdated( item);
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+				
+				dispatchEvent( new TopEvent( TopEvent.ITEM_SAVE_ERROR));
+			}
+			
+			//===========================================================================================================
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}				
+		]]>
+	</fx:Script>
+	<s:BorderContainer id="locationView" width="100%" backgroundAlpha="0.6"
+					   backgroundColor="0xf0f0f0" borderWeight="1" click="handleLocationEdit(event)"
+					   cornerRadius="5" horizontalCenter="0" verticalCenter="0">
+		<s:layout>
+			<s:HorizontalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="5"
+								verticalAlign="middle"/>
+		</s:layout>
+		<s:VGroup width="100%">
+			<s:Label id="lLocName" width="100%" styleName="locationItemName"/>
+			<s:HGroup width="100%">
+				<s:Label id="lType" styleName="locationItemId"/>
+				<s:Label text="-" styleName="locationItemId"/>
+				<s:Label id="tag_major" styleName="locationItemId"/>
+				<s:Label text="-" styleName="locationItemId"/>
+				<s:Label id="tag_minor" styleName="locationItemId"/>
+			</s:HGroup>
+		</s:VGroup>
+	</s:BorderContainer>
+	<s:Button id="bAddLoc" height="{bAddLoc.width}" label="Neu" click="addLocation(event)"
+			  emphasized="true"/>
+</s:Group>

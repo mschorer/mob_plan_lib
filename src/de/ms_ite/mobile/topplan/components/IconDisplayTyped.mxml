@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				   xmlns:s="library://ns.adobe.com/flex/spark"
+				   backgroundAlpha="0.4" borderColor="#000000" borderVisible="true" borderWeight="2"
+				   click="editIcon( event)" cornerRadius="3" creationComplete="initUI( event)"
+				   dropShadowVisible="true">
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.TagWrapper;
+			import de.ms_ite.mobile.topplan.callouts.IconSelectCallout2;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.popups.IconPopup;
+			import de.ms_ite.mobile.topplan.popups.IconPopupSingle2;
+			
+			import models.RetrievalParameters;
+			import models.SignsIcon;
+			import models.SignsIconMap;
+			import models.SignsItem;
+			import models.SignsModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.core.UIComponent;
+			import mx.events.CollectionEvent;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.components.CalloutPosition;
+									
+			protected var _item:SignsItem;
+			
+			protected static var icSelect:IconSelectCallout2;	// IconPopupSingle2;
+			protected var _attachSelector:Boolean = true;
+			
+			protected var _itemModel:SignsItem;
+			protected var _item_icons:ArrayCollection;
+			
+			protected var _filterType:int = -1;
+			protected var _linkageType:int = 0;
+			
+			protected var _iconModel:SignsIcon;
+			protected var _iconMapModel:SignsIconMap;
+			
+			protected var _mapItem:SignsIconMap;
+						
+			protected function initUI(event:FlexEvent):void {				
+				if ( _item != null) showIcons();
+			}
+			
+			public function get item():SignsItem {
+				return _item;
+			}
+			
+			public function set item( i:SignsItem):void {
+				_item = i;
+				
+				if ( _item.cache_id < 0) {
+//					enabled = false;
+					setStyle( 'borderColor', 0xe0e0e0);
+					setStyle( 'backgroundColor', 0xf0f0f0);
+				} else {
+//					enabled = true;
+					setStyle( 'borderColor', 0xc0c0c0);					
+					setStyle( 'backgroundColor', 0xd0d0d0);
+				}
+				if ( iIcon != null) showIcons();
+			}
+			
+			public function get filterType():int {
+				return _filterType;
+			}
+			
+			public function set filterType( t:int):void {
+				_filterType = t;
+			}
+			
+			public function set linkType( t:int):void {
+				if ( t != _linkageType) {
+					_linkageType = t;
+					if ( _item != null) showIcons();
+				}
+			}
+			
+			public function get linkType():int {
+				return _linkageType;
+			}
+			
+			public function set iconMap( ac:ArrayCollection):void {
+				if ( _item_icons != null) _item_icons.removeEventListener( CollectionEvent.COLLECTION_CHANGE, iconMapChanged);
+				_item_icons = ac;
+				_item_icons.addEventListener( CollectionEvent.COLLECTION_CHANGE, iconMapChanged);
+				updateIconView();
+			}
+			
+			public function get iconMap():ArrayCollection {
+				return _item_icons;
+			}
+			
+			//-------------------------------------------------------------------------------------------
+/*			
+			public function commit():String {
+				var msg:String = "commit icons for ["+_item.cache_id+"] type["+_linkageType+"] ";
+				
+				debug( "commit ["+_item.cache_id+"] ["+icSelect+"]");
+//				if ( _item.cache_id >= 0 && icSelect != null && _item_icons.length > 0) msg = "\n"+icSelect.commitMap();
+
+				var msg:String = "icon ["+_linkageType+"] ";
+				
+				for( var i:int=0; i < _item_icons.length; i++) {
+					var im:SignsIconMap = _item_icons.getItemAt( i) as SignsIconMap;
+					
+					if ( im.state == SignsModel.STATE_NEW) {
+						msg += "neu["+im.sort+":"+im.cache_icon_id+"] ";
+					} else {
+						if ( im.deleted) {
+							msg += "off["+im.sort+":"+im.cache_icon_id+"] ";
+						} else {
+							msg += "alt["+im.sort+":"+im.cache_icon_id+"] ";
+						}
+					}
+					im.save();
+				}
+				
+				debug( msg);
+				
+				return msg;
+			}
+*/			
+			protected function showIcons():void {
+				if ( _iconMapModel == null) _iconMapModel = new SignsIconMap();
+				
+				if ( _item_icons == null) {
+					var sp:RetrievalParameters = new RetrievalParameters( { cache_item_id:_item.cache_id, sort:_linkageType});	//, true, 'deleted ASC');
+					_item_icons = _iconMapModel.list( sp);
+				}
+				
+				updateIconView();
+			}
+			
+			protected function iconMapChanged( evt:CollectionEvent):void {
+				updateIconView();
+			}
+			
+			public function updateIconView( lst:ArrayCollection=null):void {
+				if ( lst != null) _item_icons = lst;
+				
+				_iconModel = null;
+				
+				var iconTypeCount:int = 0;
+				if ( _item_icons.length > 0) {
+//					debug( "icons ["+_linkageType+"] #"+_item_icons.length);
+
+					for( var i:int = 0; i < _item_icons.length; i++) {
+						var it:SignsIconMap = _item_icons.getItemAt( i) as SignsIconMap;
+						
+//						debug( "  filter icon ["+_linkageType+":"+it.sort+"]");
+						if ( _linkageType != it.sort) continue;
+						
+						var ic:SignsIcon = SignsIcon( AppSettings.iconList.getItemAt( AppSettings.iconIndexById( it.cache_icon_id)));
+						iconTypeCount++;
+	
+						debug( "  icon: "+(it.deleted ? '-' : '+')+" / "+it.sort+" ["+ic.name+"] ["+ic.cache_preview_url+"]");
+	
+						if ( ! it.deleted) _iconModel = ic;
+					}
+				} else {
+//					debug( "  no icons ["+_linkageType+"]");					
+				}
+				lCount.text = ( iconTypeCount > 0) ? '#'+iconTypeCount : '-';
+
+				if ( _iconModel != null) {
+					iIcon.source = _iconModel.cache_preview_url;
+					lName.text = _iconModel.name;
+					setStyle( 'borderColor', 0xa0d0a0);
+					setStyle( 'backgroundColor', 0xd0f0d0);
+				} else {
+					iIcon.source = null;
+					lName.text = null;
+					
+					if ( iconTypeCount > 0) {
+						setStyle( 'borderColor', 0xd0a0a0);
+						setStyle( 'backgroundColor', 0xf0d0d0);
+					} else {
+						setStyle( 'borderColor', 0xc0c0c0);
+						setStyle( 'backgroundColor', 0xd0d0d0);
+					}
+
+//					debug( "  no icons ["+_linkageType+"]");
+				}
+			}
+
+			protected function editIcon( event:MouseEvent):void {
+				debug( "edit: ["+_mapItem+"/"+_linkageType+"/"+_filterType+"]");
+				
+				if ( icSelect == null) {
+					icSelect = new IconSelectCallout2();	//IconPopupSingle2();
+/*
+					icSelect.horizontalPosition = 'middle';
+					icSelect.verticalPosition = 'middle';
+*/
+					icSelect.horizontalPosition = CalloutPosition.AUTO;
+					icSelect.verticalPosition = CalloutPosition.AUTO;					
+				}
+				if ( _attachSelector) {
+					icSelect.addEventListener( Event.COMPLETE, handleClose);
+					_attachSelector = false;
+					debug( "attach ev listener.");
+				}
+				
+				icSelect.item = _item;
+				icSelect.linkType = _linkageType;				
+				icSelect.iconFilter = _filterType;
+				
+				icSelect.iconMap = _item_icons;
+				
+				icSelect.open( DisplayObjectContainer( this), true);
+				
+				callLater( repos);
+//				PopUpManager.centerPopUp( icSelect);
+			}
+			
+			protected function repos():void {
+				icSelect.updatePopUpPosition();
+			}
+			
+			protected function handleClose( evt:Event):void {
+				debug( "closed. updating");
+			
+//				icSelect.removeEventListener( Event.COMPLETE, handleClose);
+
+				//icSelect.iconMap
+				if ( icSelect.item == _item && icSelect.linkType == _linkageType) updateIconView( icSelect.iconMap);
+				else {
+					debug( "skip updating ... ["+_item.cache_id+"] ["+_linkageType+"] ["+_filterType+"]");
+				}
+			}
+			
+			protected function debug( s:String):void {
+				//trace( this.className+": "+s);
+			}									
+		]]>
+	</fx:Script>
+	<s:Image id="iIcon" width="100%" height="100%" backgroundAlpha="0" horizontalCenter="0"
+			 scaleMode="letterbox" verticalCenter="0"/>
+	<s:Label id="lName" width="100%" styleName="iconSelectorName" horizontalCenter="0" showTruncationTip="true" maxDisplayedLines="2"
+			 text="" verticalCenter="0"/>
+	<s:Label id="lCount" left="4" top="4" styleName="iconSelectorCount" text="-"/>
+</s:BorderContainer>

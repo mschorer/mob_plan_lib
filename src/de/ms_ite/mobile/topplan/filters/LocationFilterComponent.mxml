@@ -1,0 +1,470 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  xmlns:mx="library://ns.adobe.com/flex/mx"
+		  xmlns:ns="de.ms_ite.mobile.topplan.components.*"
+		  xmlns:ns1="de.ms_ite.mobile.topplan.layouts.*"
+		  xmlns:ns2="de.ms_ite.mobile.topplan.filters.*"
+		  creationComplete="initUI(event)" horizontalAlign="left">
+	<!-- s:layout>
+		<s:VerticalLayout/>
+	</s:layout -->
+	<fx:Metadata>
+		[Event(name="complete", type="flash.events.Event")]
+	</fx:Metadata>
+	<fx:Declarations>
+		<s:DateTimeFormatter id="sqlFormat" dateTimePattern="yyyy-MM-dd"/>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.maptech.Bounds;
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.TagWrapper;
+			
+			import models.RetrievalParameters;
+			import models.SignsLocation;
+			import models.SignsOwner;
+			import models.SignsProject;
+			import models.SignsTag;
+			import models.SignsTagMap;
+			
+			import mx.collections.ArrayCollection;
+			import mx.core.UIComponent;
+			import mx.events.FlexEvent;
+			
+			import views.FilterOwnerView;
+			import views.FilterTagView;
+			
+			protected var _locModel:SignsLocation;
+//			protected static var _filterTags:ArrayCollection;
+			
+			protected function initUI(event:FlexEvent):void {
+				tbSelect.selectedIndex = 0;
+				slPagesize.value = pgSize;
+				
+				pfc.addEventListener(Event.CHANGE, monTabs);
+				sfc.addEventListener(Event.CHANGE, monTabs);
+				tfc.addEventListener(Event.CHANGE, monTabs);
+				foc.addEventListener(Event.CHANGE, monTabs);
+				tyfc.addEventListener(Event.CHANGE, monTabs);
+				
+				busy = false;
+				error = null;
+			}
+			
+			public function set busy( b:Boolean):void {
+				biWait.visible = b;
+			}
+			
+			public function set error( s:String):void {
+				if ( s == null || s.length == 0) {
+					bcMsg.includeInLayout = bcMsg.visible = false;
+				} else {
+					lMsg.text = s;
+					bcMsg.includeInLayout = bcMsg.visible = true;
+				}
+			}
+			
+/*			
+			protected function attachFilter():void {
+				tfc.attachFilter();
+			}
+		
+			protected function get filterTagIDs():Array {
+				debug( "commit:");
+				
+				var filterIDs:Array = new Array();
+				
+				for( var i:int = 0; i < tfc.tagList.length; i++) {
+					var tw:TagWrapper = TagWrapper( tfc.tagList.getItemAt( i));
+					
+					if ( tw.selected) filterIDs.push( tw.item.cache_id);
+				}				
+				
+				return filterIDs;
+			}
+*/
+			protected function get nameFilter():String {
+				return locData.filterName;
+			}
+
+			protected function get tagFilter():String {
+				return locData.filterTag;
+			}
+			
+			public function getFilter( loc:SignsLocation, view:Bounds, lon:Number, lat:Number):RetrievalParameters {
+				var nf:String;
+				var tables:Array;
+				var fields:Array = null;
+				var conds:Object = new Object();
+
+				var masterSpec:Array = new Array();
+				var subSpec:Array = new Array();
+				var exSpec:Array = new Array();
+
+				var statusCond:String;
+				
+				var tfIDs:Array = tfc.selectedTagIDs;
+				
+				var sp:RetrievalParameters;
+				var cachable:Boolean = true;
+
+				var vdist:Number = 0.1;
+				var hdist:Number = 0.1 / Math.cos( lat * Math.PI / 180);
+
+				_locModel = loc;
+				_locModel.pageSizeLocal = pgSize;
+				
+				var om:SignsOwner = foc.ownerModel;
+				
+				var proj:SignsProject = pfc.project;
+				var from:Date = pfc.from;
+				var to:Date = pfc.to;
+				
+				var actionFilters:Array = sfc.actionFilter;
+				var statusFilters:Array = sfc.statusFilter;
+
+				var typeFilters:Array = tyfc.typeFilter;
+
+				var latCorr:Number = Math.cos( lat * Math.PI / 180);
+				var latCorrSq:Number = ( latCorr*latCorr);
+				
+				var specLevel:int = 0;
+				
+				if ( proj != null || from != null || to != null || actionFilters.length > 0 || statusFilters.length > 0) specLevel = 3;
+				else if ( tfIDs != null && tfIDs.length > 0) specLevel = 2;
+				else if ( typeFilters.length > 0) specLevel =1 ;
+
+				if ( proj != null) {
+					masterSpec.push( " a.cache_project_id='"+proj.cache_id+"'");
+					subSpec.push( "ia.cache_project_id='"+proj.cache_id+"'");
+					exSpec.push( "sma.cache_project_id='"+proj.cache_id+"'");
+				}
+				
+				if ( from != null) {
+					masterSpec.push( " date(a.cache_modified) >=date('"+sqlFormat.format( from)+"')");
+					subSpec.push( "date( ia.cache_modified) >=date('"+sqlFormat.format( from)+"')");						
+					exSpec.push( "date( sma.cache_modified) >=date('"+sqlFormat.format( from)+"')");						
+				}
+				
+				if ( to != null) {
+					masterSpec.push( " date(a.cache_modified) <=date('"+sqlFormat.format( to)+"')");
+					subSpec.push( "date(ia.cache_modified) <=date('"+sqlFormat.format( to)+"')");						
+					exSpec.push( "date(sma.cache_modified) <=date('"+sqlFormat.format( to)+"')");						
+				}
+				
+				var latestAction:String = '';	// = ' a.cache_id=(';
+
+				latestAction += 'select max( ia.cache_id) from items itm, itemactions ia where l.cache_id=itm.cache_location_id AND itm.cache_id=ia.cache_item_id';
+				// addon: top level items only
+				//#latestAction += ' AND itm.cache_parent_id < 0 ';
+				//latestAction += 'select max( ia.cache_id) from itemactions ia where i.cache_id=ia.cache_item_id';
+
+				//if ( specLevel != 3 /* || statusFilters.length == 0*/) 
+				latestAction += ' AND ia.status IN( '+ AppSettings.relevantStatusCodeIds.join( ", ")+')'; // ia.status >= -1 
+				if ( subSpec.length > 0) latestAction += ' AND '+subSpec.join( ' AND ');
+				//latestAction += ')';
+
+				fields = [{'DISTINCT l.*':''}, {'status':'coalesce( a.status, '+AppSettings.STATUS_UNDEF.toString()+')'}, {dist:''+latCorrSq+'*(l.cache_lon-'+lon+')*(l.cache_lon-'+lon+')+(l.cache_lat-'+lat+')*(l.cache_lat-'+lat+')'}];
+
+				switch( specLevel) {
+					case 3:
+						tables = [ { 'locations':'l'}];
+						if ( tfIDs != null && tfIDs.length > 0) {
+
+							tables.push( { 'items_tags':'it'});
+							
+							var filterTags:String = ('it.cache_tag_id IN ('+tfIDs.join(', ')+')');
+							conds[ filterTags] = '';
+
+							conds[ ' i.cache_id=it.cache_item_id'] = '';
+						}						
+						tables.push( { 'items':'i'}, { 'itemactions':'a'});
+
+						conds[ ' l.cache_id=i.cache_location_id'] = '';
+						conds[ ' i.cache_id=a.cache_item_id'] = '';
+						// addon: top level items only
+						//#conds[ ' i.cache_parent_id < 0'] = '';
+						
+						if ( typeFilters.length > 0) {
+							conds[ ' i.type IN('+typeFilters.join(", ")+")"] = '';
+							latestAction += ' AND itm.type IN('+typeFilters.join(', ')+')';
+						}
+						
+						if ( actionFilters.length > 0) {
+							var af:String;
+							
+							if ( sfc.actionModeLatest) {
+								af = "a.type IN("+actionFilters.join(", ")+")";
+							} else {
+								af = "EXISTS ( SELECT sma.cache_id FROM itemactions sma WHERE sma.cache_item_id=i.cache_id AND sma.type IN("+actionFilters.join(", ")+")";
+								if ( exSpec.length > 0) af += ' AND '+exSpec.join( ' AND ');
+								af += ")";
+							}
+							conds[ af] = '';
+						}
+						
+						if ( statusFilters.length > 0) {
+							var sf:String;
+							if ( sfc.statusModeLatest) {
+								sf = "a.status IN("+statusFilters.join(", ")+")";
+							} else {
+								sf = "EXISTS ( SELECT sma.cache_id FROM itemactions sma WHERE sma.cache_item_id=i.cache_id AND sma.status IN("+statusFilters.join(", ")+")";
+								if ( exSpec.length > 0) sf += ' AND '+exSpec.join( ' AND ');
+								sf += ")";
+							}
+							conds[ sf] = '';
+						}
+						
+						conds[ ' a.cache_id=('+latestAction+')'] = '';
+						//XXX conds[ ' a.status IN( '+ AppSettings.relevantStatusCodeIds.join( ", ")+')'] = '';
+						
+						cachable = false;
+						break;
+					
+					case 2:
+						tables = [{ 'locations':'l'},{ 'items_tags':'it'},{ 'items':'i LEFT JOIN itemactions a ON i.cache_id=a.cache_item_id'}];
+
+						conds[ ' l.cache_id=i.cache_location_id'] = '';
+
+						if ( typeFilters.length > 0) {
+							conds[ ' i.type IN('+typeFilters.join(", ")+")"] = '';
+							latestAction += ' AND itm.type IN('+typeFilters.join(', ')+')';
+						}
+							
+						conds[ ' i.cache_id=it.cache_item_id'] = '';
+						// addon: top level items only
+						//#conds[ ' i.cache_parent_id < 0 '] = '';
+
+						var filterTags:String = (' it.cache_tag_id IN ('+tfIDs.join(', ')+')');
+						conds[ filterTags] = '';
+						
+//						statusCond = ' (i.cache_id IS NULL';
+						statusCond = '( NOT EXISTS (select ia.cache_id from items itm, itemactions ia where l.cache_id=itm.cache_location_id AND itm.cache_id=ia.cache_item_id';
+						// addon: top level items only
+						//#statusCond += ' AND itm.cache_parent_id < 0 ';
+						statusCond += ')';
+						statusCond += ' OR '+' a.cache_id=('+latestAction+')'+')';
+						conds[ statusCond] = '';
+						//XXX conds[ ' a.status IN( '+ AppSettings.relevantStatusCodeIds.join( ", ")+')'] = '';
+						
+						if ( tFilterOptim.selected) {
+							var distRest:String = '( l.cache_lon <'+(lon+hdist)+' AND l.cache_lon >'+(lon-hdist)+' AND l.cache_lat <'+(lat+vdist)+' AND l.cache_lat >'+(lat-vdist)+')';
+							conds[ distRest] = '';
+							debug( "scale ["+hdist+" x "+vdist+"]");
+						}
+
+						cachable = false;
+						break;
+					
+					case 1:
+						tables = [{ 'locations':'l'},{ 'items':'i LEFT JOIN itemactions a ON i.cache_id=a.cache_item_id'}];
+						
+						conds[ ' l.cache_id=i.cache_location_id'] = '';
+						// addon: top level items only
+						//#conds[ ' i.cache_parent_id < 0'] = '';
+						
+						if ( typeFilters.length > 0) {
+							conds[ ' i.type IN('+typeFilters.join(", ")+")"] = '';
+							latestAction += ' AND itm.type IN('+typeFilters.join(', ')+')';
+							
+//							conds[ ' EXISTS( SELECT itt.cache_id FROM items itt WHERE l.cache_id=itt.cache_location_id AND itt.type IN('+typeFilters.join(', ')+'))'] = ''; 
+						}
+						
+						statusCond = ' (';
+						statusCond += 'a.cache_id IS NULL OR ';
+//						statusCond += ' OR NOT EXISTS (select ia.cache_id from items itm, itemactions ia where l.cache_id=itm.cache_location_id AND itm.cache_id=ia.cache_item_id)';
+						statusCond += 'a.cache_id=('+latestAction+')'+')';
+						conds[ statusCond] = '';
+						//XXX conds[ ' a.status IN( '+ AppSettings.relevantStatusCodeIds.join( ", ")+')'] = '';
+						
+						if ( tFilterOptim.selected) {
+							var distRest:String = '( l.cache_lon <'+(lon+hdist)+' AND l.cache_lon >'+(lon-hdist)+' AND l.cache_lat <'+(lat+vdist)+' AND l.cache_lat >'+(lat-vdist)+')';
+							conds[ distRest] = '';
+							debug( "scale ["+hdist+" x "+vdist+"]");
+						}
+						
+						cachable = false;
+						break;
+					
+					case 0:
+					default:
+						tables = [{ 'locations':'l LEFT JOIN items i ON l.cache_id=i.cache_location_id LEFT JOIN itemactions a ON i.cache_id=a.cache_item_id'}];
+						
+						statusCond = ' (i.cache_id IS NULL';
+						statusCond += ' OR NOT EXISTS (select ia.cache_id from items itm, itemactions ia where l.cache_id=itm.cache_location_id AND itm.cache_parent_id < 0 AND itm.cache_id=ia.cache_item_id)';
+						statusCond += ' OR '+' a.cache_id=('+latestAction+')'+')';
+						conds[ statusCond] = '';
+						
+						if ( tFilterOptim.selected) {
+							var distRest:String = '( l.cache_lon <'+(lon+hdist)+' AND l.cache_lon >'+(lon-hdist)+' AND l.cache_lat <'+(lat+vdist)+' AND l.cache_lat >'+(lat-vdist)+')';
+							conds[ distRest] = '';
+							debug( "scale ["+hdist+" x "+vdist+"]");
+						}
+						
+						cachable = false;				
+				}
+
+				for each( var spec1:String in masterSpec) {
+					conds[ spec1] = '';
+				}
+
+				debug( "get locations local #["+pgSize+"] ["+(( proj != null) ? proj.name : '---')+"] ["+((tfIDs == null) ? '' : tfIDs.join("-"))+"] @["+lon+", "+lat+"]");
+				
+				if ( nameFilter != null) {
+					nf = "( l.name like '"+nameFilter+"%' OR l.description like '%"+nameFilter+"%')";
+					conds[ nf] = '';
+				}
+				
+				if ( tagFilter != null) {
+					var tf:String = tagFilter;
+					var p:Array = tagFilter.split('-');
+					
+					nf = "( l.tag_major like '"+p[0]+"%'";
+					if ( p.length > 1) nf += " AND l.tag_minor like '%"+p[1]+"%'";
+					nf += ")";
+					conds[ nf] = '';
+				}
+				
+				if ( tFilterView.selected) {
+					nf = "( "+view.left+"<= l.cache_lon AND l.cache_lon<="+view.right+" AND "+view.bottom+"<= l.cache_lat AND l.cache_lat<="+view.top+")";
+					conds[ nf] = '';
+				}
+				
+				if ( om != null) {
+					nf = "( i.cache_owner_id="+om.cache_id+")";
+					conds[ nf] = '';					
+				}
+				
+				sp = new RetrievalParameters( conds, true, 'dist ASC', ''+pgSize /*'0, '+pgSize*/);
+				sp.cachable = cachable;
+				sp.fields = fields;
+				if ( tables != null) sp.tables = tables;
+				
+				debug( "spec ["+specLevel+"] "+sp.toString());
+
+				return sp;
+			}
+
+			
+			protected function get pgSize():int {
+				return ( slPagesize != null) ? slPagesize.value : 100;
+			}
+			
+			protected function set pgSize( v:int):void {
+				slPagesize.value = v;
+				lPagesize.text = "Lade #"+v;
+			}
+/*			
+			protected function unmarkTags():void {
+				debug( "unmark all.");
+				if ( tfc != null) tfc.unmarkTags();
+			}
+*/			
+			protected function submit(event:MouseEvent):void {
+				
+//				var tl:Array = FilterTagView( vnTags.activeView).selectedTagIDs;
+				
+				busy = true;
+				
+				dispatchEvent( new Event( Event.COMPLETE));
+			}
+			
+			public function get pageSize():int {
+				return slPagesize.value;
+			}
+			
+			public function set pageSize( s:int):void {
+				pgSize = s;
+			}
+			
+			protected function changePageSize(event:Event):void {
+				trace( "pageSize: "+slPagesize.value);	
+				if ( _locModel != null) _locModel.pageSizeLocal = slPagesize.value; 
+				lPagesize.text = "Lade #"+slPagesize.value;
+			}
+			
+			protected function tabChanged( event:Event):void {
+				dispatchEvent( new Event( Event.CHANGE));
+			}
+			
+			protected function monTabs( evt:Event=null):void {
+				for( var i:int = 0; i < filterTabs.length; i++) {
+					var ft:FilterSpec = filterTabs.getItemAt( i) as FilterSpec;
+					var uc:UIComponent = ft as UIComponent;
+					
+					if ( ft.active()) uc.name += (uc.name.indexOf('*') < 0) ? '*' : '';
+					else uc.name = (uc.name.indexOf('*') < 0) ? uc.name : uc.name.substr(0, uc.name.indexOf('*'));
+				}
+				i = tbSelect.selectedIndex;
+				filterTabs.refresh();
+				tbSelect.selectedIndex = i;
+			}
+
+			protected function resetAllFilters( event:Event):void {
+				for( var i:int; i < filterTabs.length; i++) {
+					filterTabs.getItemAt( i).reset();
+				}
+				
+				callLater( monTabs);
+			}
+			
+			protected function debug( l:String):void {
+				trace( this.className+": "+l);
+			}
+		]]>
+	</fx:Script>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:Label id="lPagesize" width="140" text="Lade #"/>
+		<s:HSlider id="slPagesize" width="100%" minWidth="300" change="changePageSize(event)"
+				   maximum="1000" minimum="50" stepSize="50" value="250"/>
+		<s:Spacer width="80" height="100%"/>
+		<s:BusyIndicator id="biWait"/>
+		<s:Button id="bGo" label="Filter" click="submit(event)" emphasized="true"/>
+	</s:HGroup>
+	<s:BorderContainer id="bcMsg" width="100%" backgroundColor="#FF6666" borderColor="#AB0000"
+					   contentBackgroundColor="#C40000" cornerRadius="4">
+		<s:layout>
+			<s:HorizontalLayout verticalAlign="middle"/>
+		</s:layout>
+		<s:Label id="lMsg" x="12" y="116" width="100%" color="#FFFFFF" fontWeight="bold" text="Label"
+				 textAlign="center"/>
+	</s:BorderContainer>
+	<s:HGroup width="100%" verticalAlign="bottom">
+		<ns2:LocationDataFilter id="locData"/>
+		<s:Spacer width="100%" height="100%"/>
+		<s:VGroup horizontalAlign="right">
+			<s:HGroup width="100%" horizontalAlign="right" verticalAlign="middle">
+				<s:Label text="nur Sichtbare"/>
+				<s:ToggleSwitch id="tFilterView" toolTip="Suche auf sichtbaren Kartenauschnitt beschränken?"/>
+			</s:HGroup>		
+			<s:HGroup horizontalAlign="right" verticalAlign="middle">
+				<s:Label text="10km Radius"/>
+				<s:ToggleSwitch id="tFilterOptim" selected="true" toolTip="Suche auf nahe Elemente beschränken?"/>
+			</s:HGroup>					
+		</s:VGroup>
+		<!-- s:SpinnerListContainer height="100%">
+			<s:SpinnerList id="slLocal"/>
+		</s:SpinnerListContainer -->
+	</s:HGroup>
+	<s:HGroup width="100%">
+		<s:ButtonBar id="tbSelect" requireSelection="true" dataProvider="{filterTabs}" change="tabChanged( event);" labelField="name"/>
+		<s:Spacer width="100%" height="100%"/>
+		<s:Button label="Reset" click="resetAllFilters( event)" emphasized="true"/>
+	</s:HGroup>
+	<s:DataGroup id="editors" width="100%" height="100%">
+		<s:layout>
+			<ns1:ViewStackLayout index="{tbSelect.selectedIndex}" />
+		</s:layout>
+		<!-- Children... -->
+		<s:dataProvider>
+			<s:ArrayCollection id="filterTabs">
+				<ns2:ProjectFilterComponent id="pfc" name="Projekte" width="100%" height="100%"/>
+				<ns2:StatusFilterComponent id="sfc" name="Status" width="100%" height="100%"/>
+				<ns2:TagFilterComponent id="tfc" name="Tags" width="100%" height="100%"/>
+				<ns2:FilterOwnerComponent id="foc" name="Eigentümer" width="100%" height="100%"/>
+				<ns2:TypeFilterComponent id="tyfc" name="Schildtyp" width="100%" height="100%"/>
+			</s:ArrayCollection>
+		</s:dataProvider>
+	</s:DataGroup>
+</s:VGroup>

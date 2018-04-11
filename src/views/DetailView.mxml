@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		creationComplete="initUI(event)"
+		width="100%" height="100%" actionBarVisible="true" enabled="{ data != null}"
+		tabBarVisible="true">
+	<s:layout>
+		<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+		<fx:Declarations>
+			<s:RemoteObject id="locService" fault="faultHandler( event)" source="viaMobile" destination="amfphp">
+				<s:method name="getSchilder" result="listSchilder( event);" />
+			</s:RemoteObject>
+			<!-- Place non-visual elements (e.g., services, value objects) here -->
+			<s:DateTimeFormatter id="fmt" dateTimePattern="yyyyMMdd_HHmmss" />
+		</fx:Declarations>
+		<fx:Script>
+			<![CDATA[
+				import de.ms_ite.mobile.topplan.callouts.ImageCallout;
+				
+				import flash.filesystem.File;
+				
+				import mx.collections.ArrayCollection;
+				import mx.controls.Image;
+				import mx.rpc.events.FaultEvent;
+				import mx.rpc.events.ResultEvent;
+				
+				protected var cameraUI:CameraUI;
+				protected var imageCallout:ImageCallout;
+				
+				protected var acSigns:ArrayCollection;
+			
+				private var dataSource:IDataInput;
+				protected var loader:Loader;
+				protected var uploader:URLLoader;
+
+				protected var imgPromise:MediaPromise;
+				protected var upl:File;
+				
+//				protected var _data:Object;
+				
+				protected function initUI( event:Event):void {
+					acSigns = new ArrayCollection();
+					lItems.dataProvider = acSigns;
+					
+					if (CameraUI.isSupported) {
+						cbPhoto.enabled = true;
+					}
+				}
+				
+				override public function set data( dest:Object):void {
+					super.data = dest;
+					
+					if ( dest != null) getSigns( dest);
+				}
+/*				
+				protected function format():void {
+					poiRegion.text = data.region;
+					poiStandort.text = data.locid;
+					poiKommune.text = data.kommune;
+					
+					poiState.selected = true;
+					poiDescription.text = data.description;
+				}
+*/
+/*				
+				protected function updateData( evt:Event):void {
+					if ( _data != null) format();
+				}
+*/				
+				
+				protected function doSnapshot( evt:Event):void {
+					debug( "camera");
+					/*				
+					var v:Video = new Video( 400, 300);
+					cImage.addChild(v);
+					var c:Camera = Camera.getCamera();
+					c.setMode( 400, 300, 10);
+					v.attachCamera(c);
+					*/
+					
+					if ( cameraUI == null) {
+						cameraUI = new CameraUI();
+						
+						cameraUI.addEventListener( MediaEvent.COMPLETE, handleSnapshot);
+					}
+					cameraUI.launch(MediaType.IMAGE);
+				}
+				
+				protected function handleSnapshot(event:MediaEvent):void {
+					imgPromise = event.data;
+					debug( "img promise: "+imgPromise);
+					
+					dataSource = imgPromise.open();
+					if( imgPromise.isAsync ) { 
+						debug( "Asynchronous media promise." ); 
+						(dataSource as IEventDispatcher).addEventListener( Event.COMPLETE, onMediaLoaded ); 
+					} else { 
+						debug( "Synchronous media promise." ); 
+						readMediaData(); 
+					}
+				}
+				
+				private function onMediaLoaded( event:Event ):void { 
+					trace("Media load complete"); 
+					readMediaData(); 
+				}
+				
+				private function readMediaData():void {					
+					// upload local file
+					
+					var imgFile:File = imgPromise.file;
+
+					if ( imageCallout == null) {
+						imageCallout = new ImageCallout();
+					}
+
+					imageCallout.image = imgFile;
+					data.Fotopfad = imgFile.nativePath;
+
+					imageCallout.open( cbPhoto, false);
+					
+					biUpload.visible = true;
+					
+					uploadFile( imgFile);
+				}
+				
+				protected function uploadFile( up:File):void {
+					var sendVars:URLVariables = new URLVariables();
+					sendVars.action = "upload";
+					sendVars.path = "files/photos";
+					
+					var request:URLRequest = new URLRequest(); 
+					request.data = sendVars;
+					request.url = "http://app.topplan.de/upload.php";
+					request.method = URLRequestMethod.POST;
+					request.contentType = "application/octet-stream";
+
+					if ( upl != null) {
+						upl.removeEventListener(ProgressEvent.PROGRESS, onUploadProgress);
+						upl.removeEventListener(Event.COMPLETE, onUploadComplete);
+						upl.removeEventListener(IOErrorEvent.IO_ERROR, onUploadIoError);
+						upl.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onUploadSecurityError);						
+					}
+					upl = up;
+					upl.addEventListener(ProgressEvent.PROGRESS, onUploadProgress);
+					upl.addEventListener(Event.COMPLETE, onUploadComplete);
+					upl.addEventListener(IOErrorEvent.IO_ERROR, onUploadIoError);
+					upl.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onUploadSecurityError);
+			
+					debug( "uploading: "+upl.nativePath+" / "+upl.size);
+					upl.upload( request, "file", false);
+				}
+				
+				// Get upload progress
+				private function onUploadProgress(event:ProgressEvent):void {
+					var numPerc:Number = Math.round((Number(event.bytesLoaded) / Number(event.bytesTotal)) * 100);
+					debug( "  upload: "+event.bytesLoaded+"/"+event.bytesTotal+" : "+numPerc+"%");
+				}
+				
+				// Called on upload complete
+				private function onUploadComplete(event:Event):void {
+					biUpload.visible = true;
+					debug( "upload done.");
+				}
+				
+				// Called on upload io error
+				private function onUploadIoError(event:IOErrorEvent):void {
+					debug("IO Error in uploading file: "+event);
+				}
+				
+				// Called on upload security error
+				private function onUploadSecurityError(event:SecurityErrorEvent):void {
+					debug("Security Error in uploading file: "+event);
+				}
+				
+				protected function handleCancel( evt:Event):void {
+					dispatchEvent( new Event( Event.CANCEL));
+				}
+
+				protected function handleSave( evt:Event):void {
+					dispatchEvent( new Event( Event.CLOSE));
+				}
+				
+				//------------------------------------------------------------------------------------------
+				
+				protected function getSigns( obj:Object):void {
+					//				views.DetailView( vnDetail.activeView).data = obj;
+					
+					debug( "list select: "+obj.locid);
+					
+					locService.getOperation( 'getSchilder').send( obj.locid);
+				}
+				
+				protected function listSchilder( evt:ResultEvent):void {
+					
+					acSigns.removeAll();
+					
+					var res:Array = evt.result as Array;
+					
+					debug( "found Signs #["+res.length+"]");
+					/*				
+					for( var j:int = 0; j < res.length; j++) {
+					debug( res[ j].Standort+" @ "+res[j].location);
+					}
+					*/				
+					acSigns.addAll( new ArrayCollection( res));
+				}
+				
+				private function faultHandler(fault:FaultEvent):void {
+					debug( "err: "+fault);
+					//			    CursorManager.removeBusyCursor();
+					debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+				}
+				
+				protected function labelFunc( item:Object):Object {
+					return item.pointing;
+				}
+				
+				protected function msgFunc( item:Object):Object {
+					return item.dest_a;
+				}
+				
+				protected function debug( s:String):void {
+					trace( this.className+": "+s);
+					poiDescription.text += this.className+": "+s+"\n";
+				}
+				]]>
+		</fx:Script>
+	<s:Scroller width="100%" height="100%" verticalScrollPolicy="auto">
+		<s:VGroup width="100%" height="100%" minHeight="800">
+			<s:HGroup width="100%" gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2"
+					  paddingTop="2">
+				<s:Label styleName="detail" text="Standort"/>
+				<s:Spacer width="20" height="100%"/>
+				<s:VGroup width="100%" gap="2">
+					<s:HGroup width="100%" gap="2">
+						<s:Label id="poiStandort" text="{data.locid}" width="100%" enabled="false" styleName="detailValue"/>
+						<s:Label id="poiRegion" text="{data.region}" width="80" enabled="false" styleName="detailValue"/>
+					</s:HGroup>
+					<s:Label id="poiKommune" width="100%" text="{data.kommune}" enabled="false" styleName="detailValue"/>
+				</s:VGroup>
+			</s:HGroup>
+			<s:VGroup width="100%" height="100%" gap="2" paddingBottom="2" paddingLeft="2"
+					  paddingRight="2" paddingTop="2">
+				<s:HGroup width="100%">
+					<s:Label styleName="detail" text="Status"/>
+					<s:Spacer width="100%" height="100%"/>
+					<s:ToggleSwitch id="poiState"/>
+				</s:HGroup>
+				<s:TextArea id="poiDescription" width="100%" height="100%" minHeight="100"
+							enabled="true" fontSize="18" text="{data.description}"/>
+			</s:VGroup>
+			<s:Label text="Schilder:"/>
+			<s:List id="lItems" width="100%" height="100%" itemRenderer="de.ms_ite.mobile.topplan.renderer.SignItemRenderer"/>
+			<s:HGroup width="100%" gap="20" horizontalAlign="right" paddingLeft="2" paddingRight="2"
+					  verticalAlign="middle">
+				<s:Button id="cbPhoto" click="doSnapshot( event);" enabled="false"
+						  icon="@Embed('assets/camera3.png')"/>
+				<s:BusyIndicator id="biUpload" visible="false"/>
+				<s:Spacer width="100%" height="100%"/>
+				<s:Button label="Save" click="handleSave( event);"/>
+			</s:HGroup>
+		</s:VGroup>
+	</s:Scroller>
+</s:View>

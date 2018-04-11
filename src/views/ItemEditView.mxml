@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		contentCreationComplete="initUI(event)"
+		width="100%" height="100%" xmlns:ns="de.ms_ite.mobile.*" xmlns:ns1="de.ms_ite.mobile.topplan.components.*" xmlns:ns2="de.ms_ite.mobile.topplan.selectors.*">
+	<s:layout>
+		<s:VerticalLayout gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<fx:Declarations>
+		<s:DateTimeFormatter id="fmt" dateTimePattern="yyyyMMdd_HHmmss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.callouts.ImageCallout;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.SignsAction;
+			import models.SignsIconMap;
+			import models.SignsItem;
+			import models.SignsTagMap;
+			import models.RetrievalParameters;
+			import models.StatusModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.IndexChangeEvent;
+			import spark.events.ListEvent;
+
+			private var dataSource:IDataInput;
+			
+			protected var _item:SignsItem;
+			
+			protected var _itemTagMap:SignsTagMap;
+			protected var _tagMap:ArrayCollection;
+
+			protected var _itemIconMap:SignsIconMap;
+			protected var _iconMap:ArrayCollection;
+			
+			protected function initUI( event:Event):void {
+				debug( "initUI");
+				
+				presetControls();
+			}
+			
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				debug( "set data ["+dest+"]");
+				
+				if ( dest != _item) {
+					if ( dest is SignsItem) _item = SignsItem( dest);
+					else _item = new SignsItem( dest);
+					
+					presetDependent();
+
+					if ( selDir != null) presetControls();
+				}
+				if ( slOwner != null) slOwner.switchState();
+			}
+			
+			override public function get data():Object {
+				return _item;
+			}
+			
+			protected function presetDependent():void {
+				if ( _itemTagMap == null)  _itemTagMap = new SignsTagMap();
+				_tagMap = _itemTagMap.list( new RetrievalParameters( { cache_item_id:_item.cache_id}));
+				
+				if ( _itemIconMap == null)  _itemIconMap = new SignsIconMap();
+				_iconMap = _itemIconMap.list( new RetrievalParameters( { cache_item_id:_item.cache_id}));
+			}
+			
+			protected function presetControls():void {
+				
+				if ( selType == null || _item == null) return;
+				
+				selType.value = _item.type;
+				selDir.value = _item.position;
+				
+				tiName.text = _item.name;
+				tiValue.text = _item.value;
+				taDescription.text = _item.description;
+
+				slOwner.owner_id = _item.owner_id;
+//				slOwner.locationId = _item.location_id;
+				
+				iconSelector.item = _item;
+				iconSelector.value = _iconMap;
+			}
+			
+			public function doDelete( evt:Event):void {
+			}
+			
+			public function doSave( evt:Event):void {
+				
+				_item.owner_id = slOwner.owner_id;
+				_item.type = selType.value;	//parseInt( slType.selectedItem.@data.toString());
+				_item.position = selDir.value;
+				_item.name = tiName.text;
+				_item.value = tiValue.text;
+				_item.description = taDescription.text;
+				//					_data.location = lLocation.text;
+				
+				var icons:ArrayCollection = iconSelector.value;
+				
+				debug( "save ["+_item.toString()+"]");
+				
+//				_item.callService( 'saveItem', itemSaved, faultHandler);
+
+				if ( AppSettings.online) {
+					_item.callService( 'save', itemSaved, faultHandler);
+				} else {
+					var chg:TopEvent;
+
+					if ( _item.id < 0) chg = new TopEvent( TopEvent.ITEM_ADD);
+					else chg = new TopEvent( TopEvent.ITEM_SAVED);
+
+					_item.cache_modified = new Date();
+
+					_item.save();
+					debug( "saved item ["+_item+"]");
+					
+					dispatchEvent( chg);
+				}
+			}
+			
+			protected function itemSaved( evt:ResultEvent, token:Object=null):void {
+				
+				var res:Array = evt.result as Array;
+				var status:StatusModel = new StatusModel( res[0]);
+				
+				var chg:TopEvent;
+				if ( _item.id < 0) {
+					_item.id = status.id;
+					
+					chg = new TopEvent( TopEvent.ITEM_ADD);
+				} else {
+					chg = new TopEvent( TopEvent.ITEM_SAVED);
+				}
+				_item.modified = status.modified;
+				
+				debug( "saved item ["+chg.type+"] "+status);
+				
+				dispatchEvent( chg);
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+
+				dispatchEvent( new TopEvent( TopEvent.ITEM_SAVE_ERROR));
+			}
+	
+			//===========================================================================================================
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+		]]>
+	</fx:Script>
+	<s:VGroup width="450">
+		<s:HGroup width="100%">
+			<ns2:ItemTypeSelector id="selType" width="100%" height="120"/>
+		</s:HGroup>
+		<s:HGroup width="100%">
+			<ns2:PositionSelector id="selDir" width="60" height="120"/>
+			<ns1:ItemOwnerSelect id="slOwner" width="100%" height="120" minWidth="250"/>
+		</s:HGroup>
+		<s:HGroup width="100%">
+			<s:TextInput id="tiName" width="60%"/>
+			<s:TextInput id="tiValue" width="40%"/>		
+		</s:HGroup>
+		<s:HGroup width="100%">
+			<ns1:ItemIconSelector3 id="iconSelector" height="120"/>
+			<s:TextArea id="taDescription" width="100%" height="120"/>
+		</s:HGroup>		
+	</s:VGroup>
+</s:View>

@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:HGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  xmlns:ns="de.ms_ite.mobile.topplan.components.*" creationComplete="initUI(event)"
+		  paddingBottom="1" paddingLeft="1" paddingRight="1" paddingTop="1" verticalAlign="middle">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import models.SignsModel;
+			
+			import mx.events.FlexEvent;
+			
+			public static var STATUS_IDLE:int = 0;
+			public static var STATUS_LOADING:int = 1;
+			public static var STATUS_SYNCING:int = 2;
+			public static var STATUS_DONE:int = 3;
+			
+			protected var _status:int = STATUS_IDLE;
+			
+			protected var _progress:Number = 0;
+			protected var _total:int = 100;
+			protected var _done:int = 0;
+			
+			protected var _label:String = '';
+			protected var _action:String = '';
+			protected var _downCount:int = -1;
+			protected var _upCount:int = -1;
+			
+			protected var _model:SignsModel;
+			protected var _cacheMap:Dictionary;
+			
+			protected var _modified:Date;
+			
+			protected function initUI(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				status = _status;
+				cbDone.label = _label;
+				lAction.text = _action;
+				pbLoading.progress = _progress;
+			}
+			
+			public function set model( m:SignsModel):void {
+				_model = m;
+			}
+			public function get model():SignsModel {
+				return _model;
+			}
+			
+			public function set label( l:String):void {
+				_label = l;
+				if ( cbDone != null) cbDone.label = l;
+			}
+			public function get label():String {
+				return _label;
+			}
+			
+			public function set action( l:String):void {
+				_action = l;
+				if ( lAction != null) lAction.text = l;
+			}
+			public function get action():String {
+				return _action;
+			}
+			
+			public function set cacheMap( cm:Dictionary):void {
+				_cacheMap = cm;
+			}
+			public function get cacheMap():Dictionary {
+				return _cacheMap;
+			}
+			
+			public function set status( s:int):void {
+				_status = s;
+				
+				if ( biLoading == null) return;
+				
+				switch( _status) {
+					case STATUS_LOADING:
+						biLoading.visible = true;
+						cbDone.selected = false;
+						addon.visible = (pbLoading.progress == 100);
+						break;
+					case STATUS_SYNCING:
+						biLoading.visible = true;
+						cbDone.selected = true;
+						addon.visible = true;
+						break;
+					case STATUS_DONE:
+						biLoading.visible = false;
+						cbDone.selected = true;
+						addon.visible = (pbLoading.progress == 100);
+						break;
+					
+					case STATUS_IDLE:
+					default:
+						biLoading.visible = false;
+						cbDone.selected = false;
+						addon.visible = false;
+						break;
+				}
+			}
+			public function get status():int {
+				return _status;
+			}
+			
+			public function set progress( p:Number):void {
+				_progress = p;
+			}
+			public function get progress():Number {
+				return _progress;
+			}
+			
+			public function set indetermined( s:String):void {
+				eCount.text = s;
+				lCount.text = s;
+				status = SyncStatus.STATUS_IDLE;
+			}
+			
+			public function set total( p:int):void {
+				_total = p;
+				if ( pbLoading != null) pbLoading.total = p;
+			}
+			public function get total():int {
+				return _total;
+			}
+			
+			public function set done( p:int):void {
+				_done = p;
+				if ( pbLoading != null) pbLoading.done = p;
+			}
+			public function get done():int {
+				return _done;
+			}
+			
+			public function set downCount( c:int):void {
+				_downCount = c;
+				if ( lCount != null) {
+					lCount.visible = ( _downCount >= 0);
+					lCount.text = 'd '+_downCount;
+				}
+			}
+			public function get downCount():int {
+				return _downCount;
+			}
+			
+			public function set upCount( c:int):void {
+				_upCount = c;
+				if ( eCount != null) {
+					eCount.visible = ( _upCount >= 0);
+					eCount.text = 'u '+_upCount;
+				}
+			}
+			public function get upCount():int {
+				return _upCount;
+			}
+			
+			public function set modified( d:Date):void {
+				_modified = d;
+			}
+			
+			public function get modified():Date {
+				return _modified;
+			}
+			
+			protected function ovrChange( evt:Event):void {
+				cbDone.selected = ( _status == STATUS_SYNCING || _status == STATUS_DONE);
+			}
+		]]>
+	</fx:Script>
+	<s:Group width="35">
+		<s:layout>
+			<s:BasicLayout/>
+		</s:layout>
+		<s:BusyIndicator id="biLoading" visible="false" horizontalCenter="0" verticalCenter="0"/>
+		<s:VGroup gap="2" horizontalAlign="center" horizontalCenter="0" verticalCenter="0">
+			<s:Label id="lCount" styleName="syncStatusLabel" horizontalCenter="0" visible="{_downCount >= 0}" text="{_downCount}" verticalCenter="0"/>
+			<s:Label id="eCount" styleName="syncErrorsLabel" horizontalCenter="0" visible="{_upCount >= 0}" text="{_upCount}" verticalCenter="0"/>			
+		</s:VGroup>
+	</s:Group>
+	<s:CheckBox id="cbDone" label="{_label}" enabled="true" click="ovrChange( event)"/>
+	<s:Spacer width="100%" height="100%"/>
+	<s:VGroup id="addon" visible="false" width="150" gap="4">
+		<s:Label id="lAction" width="100%" styleName="syncStatusAction" text="{_action}"/>
+		<ns:ProgressBar id="pbLoading" width="100%" done="{_done}" total="{_total}"/>
+	</s:VGroup>
+</s:HGroup>

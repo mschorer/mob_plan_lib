@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  creationComplete="initUI(event)" gap="0">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import spark.components.SpinnerList;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.components.DropDownList;
+			import spark.components.Spinner;
+			import spark.components.SpinnerListContainer;
+			import spark.components.supportClasses.ListBase;
+			import spark.events.IndexChangeEvent;
+			
+			protected var _optionGraph:XMLList;
+			protected var nodata:XMLListCollection = new XMLListCollection( new XMLList( '<item name="---" data="0"/>'));
+			
+			protected var _master:String;
+			protected var _value:String;
+			
+			protected var _masterId:int = -1;
+			protected var _typeId:int = -1;
+			
+			protected var _data:XMLList;
+			
+			protected var _typeList:ListBase;
+			
+			protected function initUI(event:FlexEvent):void {
+//				debug( "init");
+	
+				if ( _masterId >= 0) masterUpdated(); 
+			}
+			
+			override protected function createChildren():void {
+				
+				if ( AppSettings.isDesktop) {
+					var ddl:DropDownList = new DropDownList();
+					ddl.requireSelection = true;
+					ddl.labelField = "@name";
+					ddl.percentWidth = 100;
+					ddl.addEventListener( Event.CHANGE, selectionChanged);
+					ddl.setStyle( 'interactionMode', 'mouse');
+					
+					addElement( ddl);
+					
+					_typeList = ddl;
+				} else {
+					var dlc:SpinnerListContainer = new SpinnerListContainer();
+					dlc.percentWidth = 100;
+					dlc.height = 140;
+
+					
+					addElement( dlc);
+					
+					var spl:SpinnerList = new SpinnerList();
+					spl.labelField = "@name";
+					spl.percentWidth = 100;
+					spl.addEventListener( Event.CHANGE, selectionChanged);
+					spl.wrapElements = false;
+					
+					dlc.addElement( spl);
+					
+					_typeList = spl;
+				}
+				
+				super.createChildren();
+			}
+			
+			public function set data( xml:XMLList):void {
+//				debug( "set data ["+xml.toString()+"]");
+				
+				_optionGraph = xml;
+			}
+			
+			public function get data():XMLList {
+				return _optionGraph;
+			}
+			
+			public function set master( val:String):void {
+				debug( "set master ["+val+":"+_master+"]");
+				
+//				if ( _master == val) return;
+				
+				_master = val;
+				_masterId = parseInt( val, 16);
+				
+				if ( _typeList != null) masterUpdated();
+			}
+			
+			protected function masterUpdated():void {
+//				debug( "update master["+_masterId+":"+_master+"]");
+
+				var node:XML;
+				var matchingNodes:XMLList = _optionGraph.(attribute("data")==_master);
+				
+				if ( matchingNodes.length() == 0) {
+					for each( var nd:XML in _optionGraph) {
+						var dt:String = nd.@data;
+						if ( _master.indexOf( dt) == 0) {
+							node = nd;
+							break;
+						}
+					}
+				} else node = matchingNodes[0];
+
+				if ( node != null) {
+					lName.text = node.@name;
+					_data = node.*;
+				} else {
+					lName.text = "["+_master+"]";
+					_data = null;	
+				}
+
+				if ( _data != null && _data.length() > 0) {
+					_typeList.dataProvider = new XMLListCollection( _data);
+					includeInLayout = visible = _typeList.enabled = true;
+				} else {
+//					lName.text = "";
+					_typeList.dataProvider = nodata;
+					includeInLayout = visible = _typeList.enabled = false;
+				}
+				
+				//if ( _typeId >= 0) 
+				valueUpdated();
+			}
+
+			public function set value( type:int):void {
+				debug( "set type["+type.toString(16)+":"+_typeId.toString(16)+"]");
+//				if ( _typeId == type) return;
+				
+				_typeId = type;
+				_value = type.toString( 16);
+				
+				valueUpdated();
+			}
+			
+			protected function valueUpdated():void {
+				
+				if ( _value != null && _data != null) {
+
+					var xNode:XMLList = _data.(attribute("data")==_value);
+					if ( xNode.length() > 0) {
+						_typeList.selectedItem = xNode[0];
+						debug( "update type["+_masterId.toString(16)+":"+_typeId.toString(16)+"]");
+					} else {
+						debug( "type not found ["+_value+":"+_typeId.toString(16)+"] disabling.");
+						_typeList.selectedItem = _data[0];
+					}
+				} else _typeList.selectedItem = null;
+			}
+			
+			public function get value():int {
+				return _typeId;
+			}
+			
+			protected function selectionChanged( evt:IndexChangeEvent):void {
+				_value = _typeList.selectedItem.@data;
+				_typeId = parseInt( _value, 16);
+				
+//				debug( "  change type ["+_value+":"+_typeId+"]");						
+			}
+
+			protected function debug( s:String):void {
+				var instId:String = this.toString().split('.').pop() as String;
+//				trace( this.className+"["+instId+"]: "+s);
+			}			
+			
+		]]>
+	</fx:Script>
+	<s:Label id="lName" width="100%" styleName="spinnerLabel"/>
+	<!-- s:SpinnerListContainer width="100%" height="140" visible="false" includeInLayout="false" visible.mobile="true" includeInLayout.mobile="true">
+		<s:SpinnerList id="slType" width="100%" height="100%" change="selectionChanged( event);"
+					   labelField="@name" wrapElements="false"/>
+	</s:SpinnerListContainer>
+	<s:DropDownList id="slType2" width="100%" change="selectionChanged(event)"
+					interactionMode="mouse" labelField="@name"
+					visible.desktop="true" includeInLayout.desktop="true"
+					visible="false" includeInLayout="false"/ -->
+</s:VGroup>

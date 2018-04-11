@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 borderStyle="inset" cornerRadius="3" creationComplete="initUI(event)">
+	<fx:Metadata>
+		[Event(name="complete", type="flash.events.Event")]
+	</fx:Metadata>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.RetrievalParameters;
+			import models.SignsOwner;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			protected var _owners:ArrayCollection;
+			
+			protected var selectedOwner:SignsOwner;
+			
+			protected function initUI(event:FlexEvent):void {
+				
+				debug("initUI");
+				
+				if ( _owners == null) {
+					_owners = new ArrayCollection( AppSettings.ownerList.source);
+				}
+				
+				_owners.filterFunction = filter;
+				
+				if ( lTags != null) lTags.dataProvider = _owners;
+				_owners.refresh();
+				
+				if ( selectedOwner != null) markOwner();
+				lTags.addEventListener("updateComplete", keepInView);
+			}
+			
+			protected function markOwner():void {
+				debug( "tickOwner ["+selectedOwner+"]");
+				if ( _owners == null) return;
+
+				if ( selectedOwner == null) {
+					lTags.selectedIndex = -1;
+					lTags.selectedItem = null;
+					lTags.validateProperties();
+					return;
+				}
+				
+				debug( "search: "+selectedOwner.toString());
+				for( var i:int = 0; i < _owners.length; i++) {
+					var ow2:SignsOwner = SignsOwner( _owners.getItemAt( i));
+					if ( selectedOwner.cache_id == ow2.cache_id) {
+						//						lTags.selectedIndex = i;
+						lTags.selectedItem = ow2;
+						var j:int = lTags.selectedIndex;
+						debug( "   found: @["+i+"/"+j+"] "+ow2.toString());
+						return;
+					}
+				}
+				debug( "not in filter.");				
+			}
+			
+			protected function keepInView( idx:int):void {
+				debug( "selInView #"+lTags.selectedIndex+" : "+selectedOwner);
+				if ( selectedOwner != null) lTags.ensureIndexIsVisible( lTags.selectedIndex);
+			}
+			
+			public function preset( om:SignsOwner):void {
+				selectedOwner = om;
+				markOwner();
+			}
+			
+			public function set itemOwner( ow:SignsOwner):void {
+				selectedOwner = ow;
+				tiFilter.text = '';
+				
+				if ( lTags != null) markOwner();
+				
+				_owners.filterFunction = filter;
+				_owners.refresh();
+			}
+			
+			public function get itemOwner():SignsOwner {
+				return ( lTags.selectedItem == null) ? null : SignsOwner( lTags.selectedItem);
+			}
+			
+			protected function handleClose( evt:Event):void {
+				debug( "close");
+//				close( true);
+			}
+			
+			protected function submitData(event:Event):void {
+				debug( "submit");
+//				close( true);
+				callLater( sendComplete);
+			}
+			
+			protected function updateList( evt:Event):void {
+				_owners.refresh();
+				markOwner();
+			}
+			
+			protected function sendComplete():void {
+				dispatchEvent( new Event( Event.COMPLETE, true));
+			}
+			
+			protected function filter( obj:Object):Boolean {
+				if ( tiFilter == null || tiFilter.text == '' || tiFilter.text == '*') return true;
+				
+				var ow:SignsOwner = SignsOwner( obj);
+				
+				return ( ow == selectedOwner || ow.name.toLowerCase().indexOf( tiFilter.text.toLowerCase()) >= 0 || ow.ags.indexOf( tiFilter.text) >= 0);
+			}
+			
+			protected function debug( txt:String):void {
+//				trace( this.className+": "+txt);
+			}
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+	</s:layout>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:Button id="bFilter" label="Filter" click="updateList( event)"/>
+		<s:TextInput id="tiFilter" change="updateList( event)" enabled="true"/>
+		<s:Spacer width="100%" height="100%"/>
+	</s:HGroup>
+	<s:BorderContainer width="100%" height="100%" backgroundColor="0xe0e0e0" borderColor="0"
+					   borderWeight="1" contentBackgroundColor="0xe0e0e0" cornerRadius="5" horizontalCenter="0"
+					   verticalCenter="0">
+		<s:layout>
+			<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2"/>
+		</s:layout>
+		<s:List id="lTags" width="100%" height="100%" click="submitData(event)"
+				allowMultipleSelection="false" requireSelection="false" horizontalScrollPolicy="off" itemRenderer="de.ms_ite.mobile.topplan.renderer.OwnerSelectRenderer">
+			<s:layout>
+				<s:TileLayout orientation="rows" columnWidth="150" requestedColumnCount="6" requestedRowCount="4"/>
+			</s:layout>
+			<!-- s:itemRenderer>
+				<fx:Component>
+					<s:IconItemRenderer styleName="ownerItem" labelField="name" messageField="ags" height="60"/>
+				</fx:Component>
+			</s:itemRenderer -->
+		</s:List>
+	</s:BorderContainer>
+</s:BorderContainer>

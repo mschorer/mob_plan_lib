@@ -1,0 +1,908 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:ns="de.ms_ite.mobile.*"
+		xmlns:ns1="de.ms_ite.mobile.topplan.callouts.*"
+		xmlns:ns2="de.ms_ite.mobile.topplan.components.*"
+		width="100%" height="100%" actionBarVisible="false" contentCreationComplete="initUI(event)"
+		currentState="phone_landscape" tabBarVisible="false">
+	<s:states>
+		<s:State name="pad_landscape"/>
+		<s:State name="phone_landscape"/>
+		<s:State name="phone_portrait"/>
+		<s:State name="pad_portrait"/>
+	</s:states>
+		<fx:Declarations>
+			<s:DateTimeFormatter id="fmt" dateTimePattern="yyyyMMdd_HHmmss" />
+			<ns1:ItemOptionsCallout id="cbOptions"/>
+			<ns1:HistoryCallout id="cbHistory"/>
+		</fx:Declarations>
+		<fx:Script>
+			<![CDATA[
+				import de.ms_ite.mobile.topplan.AppSettings;
+				import de.ms_ite.mobile.topplan.ILocationProvider;
+				import de.ms_ite.mobile.topplan.callouts.ActionCallout;
+				import de.ms_ite.mobile.topplan.callouts.ImageCallout;
+				import de.ms_ite.mobile.topplan.callouts.ItemEditCallout;
+				import de.ms_ite.mobile.topplan.callouts.LocationEditCallout;
+				import de.ms_ite.mobile.topplan.components.ImageFileSelector2;
+				import de.ms_ite.mobile.topplan.events.TopEvent;
+				import de.ms_ite.mobile.topplan.renderer.ItemItemRenderer;
+				
+				import flash.data.SQLResult;
+				import flash.filesystem.File;
+				import flash.filesystem.FileMode;
+				import flash.filesystem.FileStream;
+				
+				import models.*;
+				
+				import mx.collections.ArrayCollection;
+				import mx.collections.XMLListCollection;
+				import mx.core.Application;
+				import mx.managers.PopUpManager;
+				import mx.rpc.events.FaultEvent;
+				import mx.rpc.events.ResultEvent;
+				
+				import spark.collections.Sort;
+				import spark.collections.SortField;
+				import spark.components.SplitViewNavigator;
+				import spark.components.ViewNavigator;
+				import spark.events.IndexChangeEvent;
+				import spark.events.ListEvent;
+
+				protected var _location:SignsLocation;
+
+				protected var _saveEvent:TopEvent;
+				protected var _locSave:SignsLocation;
+				
+				protected var cLocationEdit:LocationEditCallout;
+				protected var cItemEdit:ItemEditCallout;
+				protected var cActionAdd:ActionCallout;
+				protected var postIE:ItemItemRenderer = null;
+				
+				protected var splitNavigator:SplitViewNavigator;
+				
+				protected var ifs:ImageFileSelector2;
+				protected var snapshotAction:int;
+
+				protected var _item:SignsItem;
+				protected var _items:ArrayCollection;
+				
+				protected var _masterSort:Sort;
+				protected var _subSort:Sort;
+				protected var _subSortFunction:Function;
+				
+				protected function initUI( event:Event):void {
+					debug( "initUI");						
+					format();
+					
+//					lItems.addEventListener( PoiEvent.ITEM_EDIT, itemEdit);
+					lItems.addEventListener( IndexChangeEvent.CHANGE, closeItemOptions);
+
+					lItems.addEventListener( TopEvent.ITEM_OPTIONS, itemOpenOptions);
+					
+					cbOptions.addEventListener( TopEvent.ITEM_NEW, itemNew);
+					cbOptions.addEventListener( TopEvent.ITEM_EDIT, itemEdit);
+					
+					cbOptions.addEventListener( TopEvent.ITEM_ACTION, itemAction);
+					cbOptions.addEventListener( TopEvent.ITEM_ACTION_OK, itemOkay);
+					cbOptions.addEventListener( TopEvent.ITEM_ACTION_DELETE, itemDelete);
+					cbOptions.addEventListener( TopEvent.ITEM_ACTION_DOCUMENT, itemDocument);
+
+					cbOptions.addEventListener( TopEvent.ITEM_HISTORY, itemHistory);
+
+					cbOptions.addEventListener( TopEvent.ITEM_BROWSE, itemBrowseForFile);
+					cbOptions.addEventListener( TopEvent.ITEM_SNAPSHOT, itemDoSnapshot);
+					cbOptions.addEventListener( TopEvent.ITEM_SNAPSHOT_PREF, itemDoSnapshotPref);
+					cbOptions.addEventListener( TopEvent.ITEM_CAMERAROLL, itemSelectCameraRoll);
+					
+					splitNavigator = navigator.parentNavigator as SplitViewNavigator;
+				}
+				
+				public function chooseProject():void {
+					if ( AppSettings.currentProject == null) selProject.chooseProject();
+				}
+
+				override public function set data( dest:Object):void {
+					super.data = dest;
+					
+					if ( dest != _location) {
+						if ( dest is SignsLocation) _location = SignsLocation( dest);
+						else _location = null;	//new SignsLocation( dest);
+					}
+//					if ( splitNavigator != null) splitNavigator.hideViewNavigatorPopUp();
+
+					if ( cbOptions != null && cbOptions.isOpen) cbOptions.close();
+//					if ( cLocationEdit != null && cLocationEdit.isOpen) cLocationEdit.close();
+//					if ( cItemEdit != null && cItemEdit.isOpen) cItemEdit.close();
+
+					format();
+				}
+				
+				override public function get data():Object {
+					return _location;
+				}
+				
+				protected function format():void {
+					if ( _location == null) {
+						if ( lItems != null) {
+							lLocName.text = '';						
+							lType.text = "";
+							tag_major.text = '';
+							tag_minor.text = '';
+							if ( lItems.dataProvider != null) lItems.dataProvider.removeAll();
+						}
+						
+						return;
+					}
+					
+					debug( "set data ["+_location.id+"/"+_location.cache_id+"] ["+_location.state+"] ["+_location.tag_major+"."+_location.tag_minor+"]");
+					
+					lLocName.text = _location.name;
+					
+					lType.text = ""+_location.type;
+					
+					tag_major.text = _location.tag_major;
+					tag_minor.text = '0000'.substr( 0, 4-String(_location.tag_minor).length)+_location.tag_minor;
+					
+					if ( _location.state != SignsModel.STATE_NEW) {
+						itemsLoading.visible = true;
+						
+						var it:SignsItem = new SignsItem();
+						it.location_id = _location.id;
+						it.cache_location_id = _location.cache_id;
+						
+						retrieveItems( it);
+						
+					} else editLocation( _location, locationView);
+
+					bAdd.enabled = ( _location.state != SignsModel.STATE_NEW);
+				}
+				
+				protected function retrieveItems( it:SignsItem):void {
+					
+					if ( _item == null) _item = new SignsItem();
+					
+					if ( _items == null) _items = new ArrayCollection();
+					else _items.removeAll();
+
+					if ( AppSettings.online) {
+						it.callService( 'list', showItems, faultHandler);
+						
+						lItems.enabled = false;
+						lItems.dataProvider = null;
+					} else {
+						var fields:Array = null;
+						var conds:Object = null;
+						
+						var sp:RetrievalParameters;
+						
+						/*
+						select
+						i.*, 
+						coalesce( nullif( i.name, ''), 'icon: ' || ic.name) as name
+						from items i 
+						LEFT JOIN icons_items ii ON ii.cache_item_id=i.cache_id
+						LEFT JOIN icons ic ON ii.cache_icon_id=ic.cache_id
+						where 
+						i.cache_location_id=17363 AND (
+						ii.cache_id IS NULL OR ii.cache_id=(select max(cache_id) from icons_items ii2 where ii2.cache_item_id=i.cache_id AND ii2.deleted=FALSE)
+						)
+						ORDER BY i.cache_id
+						*/
+						
+						fields = [{'i.*':''}, {'icons':"group_concat( ic.name)"}, {'status':'coalesce( status, -10000)'}];
+						
+						var tables:Array = [ { 'items':'i LEFT JOIN itemactions ia ON i.cache_id=ia.cache_item_id AND ia.status in( '+ AppSettings.viewStatusCodeIds.join( ", ")+') LEFT JOIN icons_items ii ON i.cache_id=ii.cache_item_id AND ii.deleted=FALSE LEFT JOIN icons ic ON ii.cache_icon_id=ic.cache_id'} ];
+						
+						conds = { cache_location_id:_location.cache_id};
+						conds[ ' ( ia.status IS NULL OR ia.cache_id=( SELECT max(cache_id) FROM itemactions iact WHERE iact.cache_item_id=i.cache_id ' + 'AND iact.status IN( '+ AppSettings.viewStatusCodeIds.join( ", ")+')' + '))'] = '';
+
+//						var statusCond:String = ' (ii.cache_id IS NULL OR ii.cache_id=(SELECT max( ii2.cache_id) FROM icons_items ii2 WHERE ii2.cache_item_id=i.cache_id AND ii2.deleted=FALSE))';
+//						conds[ statusCond] = '';
+
+						var rq:RetrievalParameters = new RetrievalParameters( conds, true, 'cache_id asc', null, 'i.cache_id');
+						rq.cachable = true;
+						rq.fields = fields;
+						rq.tables = tables;
+						
+//						var rq:RetrievalParameters = new RetrievalParameters( { cache_location_id:_location.cache_id}, true, 'id asc');
+						
+						var resp:Responder = null;
+						if ( Model.asyncMode) resp = new Responder( asyncReady, it.defaultSqlErrorResponder);
+						
+						var ri:ArrayCollection = it.list( rq, resp);
+						
+						if ( ri != null) {
+							_items.addAll( ri);
+							
+							itemsReady();
+						}
+					}
+				}
+				
+				protected function asyncReady( sqe:SQLResult):void {
+					var rc:ArrayCollection = _item.addResult( sqe, _items);
+					
+					if ( rc != null) itemsReady();
+				}
+				
+				protected function showItems( evt:ResultEvent, token:Object=null):void {
+					
+					var res:Array = evt.result as Array;
+					
+					if ( res == null) debug( "no items yet.");
+					else {
+						debug( "get items #"+res.length);
+						
+						var its:ArrayCollection = new ArrayCollection( res);						
+						_items.addAll( its);
+						itemsReady();
+					}
+				}
+				
+				protected function itemsReady():void {
+					
+					debug( "set items");
+					
+					buildTree( _items);
+					
+					var reList:ArrayCollection = new ArrayCollection();
+					flattenTree( _items, reList);
+/*					
+					_items = reList;
+				}
+				
+				protected function setItems( its:ArrayCollection):void {
+					
+					buildTree( its);
+					
+					var reList:ArrayCollection = new ArrayCollection();
+					flattenTree( its, reList);
+*/					
+					lItems.enabled = true;
+					lItems.dataProvider = reList;	//new ArrayCollection( res);
+					
+					itemsLoading.visible = false;
+				}
+				
+				private function myCompare(a:Object, b:Object, fields:Array = null):int {
+					
+					var aHexMajor:String = (a as SignsItem).type.toString( 16).substr( 0, 2);
+					var bHexMajor:String = (b as SignsItem).type.toString( 16).substr( 0, 2);
+					
+//					if ( (a as SignsItem).type == 0x2810 && (b as SignsItem).type == 0x2810 || (a as SignsItem).type != 0x2810 && (b as SignsItem).type != 0x2810) {
+					if ( aHexMajor == '28' && bHexMajor == '28' || aHexMajor != '28' && bHexMajor != '28') {
+						if ( _subSort == null) {
+							_subSort = new Sort();
+							var ssField:SortField = new SortField();
+							ssField.name = "sort";
+							ssField.numeric = true;
+							
+							_subSort.fields = [ ssField];
+							_subSortFunction = _subSort.compareFunction;
+						}
+						return _subSortFunction.call(null,a,b,fields);
+					} else {
+						return ( aHexMajor == '28') ? -1 : 1;
+					}
+					// NEED to return default comparison results here?
+				}
+
+				
+				protected function flattenTree( tree:ArrayCollection, list:ArrayCollection):void {
+					if ( tree == null || tree.length == 0) return;
+
+					if ( _masterSort == null) {
+						/*								var tsField:SortField = new SortField();
+						tsField.name = "type";
+						tsField.numeric = false;
+						*/
+						var ssField:SortField = new SortField();
+						ssField.name = "sort";
+						ssField.numeric = true;
+						
+						_masterSort = new Sort();
+						_masterSort.compareFunction = myCompare;
+						_masterSort.fields = [ /*tsField,*/ ssField];
+					}
+					
+					tree.sort = _masterSort;
+					tree.refresh();
+
+					for( var i:int=0; i < tree.length; i++) {
+						var node:SignsItem = tree.getItemAt(i) as SignsItem;
+						
+						list.addItem( node);
+						var children:ArrayCollection = node.children;
+						
+						if ( children != null && children.length > 0) {
+							
+							children.sort = _masterSort;
+							children.refresh();
+							
+							flattenTree( children, list);
+						}
+					}
+				}
+
+				protected function buildTree( its:ArrayCollection):void {
+					var it:SignsItem;
+					
+					var i:int = 0;
+					while( i < its.length) {
+						it = SignsItem( its.getItemAt( i));
+						
+						if ( it.cache_parent_id > 0) {
+							for( var j:int = 0; j < its.length; j++) {
+								var ch:SignsItem = SignsItem( its.getItemAt( j));
+								if ( it.cache_parent_id == ch.cache_id) {
+									var sub:ArrayCollection = ch.children;
+									if ( sub == null) sub = new ArrayCollection();
+									sub.addItem( it);
+									ch.children = sub;
+									
+									//									its.removeItemAt( i);
+									break;
+								}
+							}
+						}							
+						
+						i++;
+					}
+					
+					i = 0;
+					while( i < its.length) {
+						it = SignsItem( its.getItemAt( i));
+						if ( it.cache_parent_id <= 0) i++;
+						else its.removeItemAt( i);
+					}
+				}
+				
+				protected function reorderHierarchical( its:ArrayCollection):void {
+					
+					var i:int = 0;
+					while( i < its.length) {
+						var it:SignsItem = SignsItem( its.getItemAt( i));
+						
+						if ( it.parent_id != 0) {
+							for( var j:int = 0; j < i; j++) {
+								var ch:SignsItem = SignsItem( its.getItemAt( j));
+								if ( it.parent_id == ch.id) {
+									var c:ArrayCollection = ch.children;
+									if ( c == null) c = new ArrayCollection();
+									c.addItem( it);
+									ch.children = c;
+									
+									//									its.removeItemAt( i);
+									break;
+								}
+							}
+						}							
+						
+						i++;
+					}
+				}
+				
+				//-------------------------------------------------------------------------------
+
+				public function saveCurrentLocation( loc:SignsLocation):void {
+					debug( "reposition loc.");
+					
+					debug( "save ["+loc.toString()+"]");
+					
+					_locSave = loc;
+					//				_location.callService( 'saveLocation', locSaved, faultHandler);
+					
+					if ( loc.state == SignsModel.STATE_NEW) _saveEvent = new TopEvent( TopEvent.LOCATION_ADD);
+					else _saveEvent = new TopEvent( TopEvent.LOCATION_SAVED);
+
+					if ( AppSettings.online) {
+						loc.callService( 'save', locSavedConnected, faultHandler);
+					} else {
+						
+						loc.cache_modified = new Date();
+						
+						debug( "saving location ["+loc+"]");
+						if ( Model.asyncMode) {
+							var resp:Responder = new Responder( locSavedAsync, _location.defaultSqlErrorResponder);
+							_location.save( resp);					
+						} else {
+							_location.save();					
+							locationSaved();
+						}
+					}
+				}
+
+				protected function locSavedAsync( sqe:SQLResult):void {
+					var b:Boolean = _location.saveResult( sqe);
+					debug( "  saved local async.");
+					locationSaved();
+				}
+				
+				protected function locSavedConnected( evt:ResultEvent, token:Object):void {
+					
+					var res:Array = evt.result as Array;
+					var status:StatusModel = new StatusModel( res[0]); 
+					
+					debug( "  saved remote async.");
+					if ( _saveEvent.type == TopEvent.LOCATION_ADD) _location.id = status.id;
+					locationSaved();
+				}
+				
+				protected function locationSaved():void {
+					debug( "saved location ["+_saveEvent.type+"] ["+_location+"]");
+					dispatchEvent( _saveEvent);
+					_saveEvent = null;					
+				}				
+
+				//-------------------------------------------------------------------------------
+
+				protected function handleLocationEdit( evt:Event):void {
+					debug( "editLoc: "+_location);
+					
+					if ( _location != null) editLocation( _location, locationView);
+				}
+				
+				protected function prepLocationEdit():void {
+					if ( cLocationEdit == null) {
+						cLocationEdit = new LocationEditCallout();
+						
+						cLocationEdit.addEventListener( TopEvent.LOCATION_SAVE_ERROR, handleLocationCancel);
+						cLocationEdit.addEventListener( TopEvent.LOCATION_SAVED, handleLocationSave);
+						cLocationEdit.addEventListener( TopEvent.LOCATION_ADD, handleLocationAdd);
+					}
+				}
+				
+				protected function editLocation( loc:SignsLocation, dParent:DisplayObjectContainer=null):void {
+					
+					if ( loc == null) return;
+					
+					prepLocationEdit();
+					cLocationEdit.data = loc;
+					
+					if ( cLocationEdit.isOpen) cLocationEdit.close( false);
+					
+					cLocationEdit.open( dParent, false);
+				}
+				
+				public function addLocation(event:MouseEvent):void {
+					debug( "add location.");
+					
+					var loc:SignsLocation = new SignsLocation();
+					var pos:GpsPos = ILocationProvider( SplitViewNavigator( ViewNavigator( this.navigator).parentNavigator).parentDocument).geoLocation;
+					
+					loc.location = pos.location;
+					loc.accuracy = loc.accuracy;
+					
+					editLocation( loc, locationView);
+				}
+				
+				protected function handleLocationCancel( evt:Event):void {
+					debug( "cancel locSave.");
+				}
+				
+				protected function handleLocationSave( evt:Event):void {
+					debug( " loc ["+evt.type+"] "+_location);
+					
+					_location = SignsLocation( cLocationEdit.data);
+					format();
+
+					dispatchEvent( new TopEvent( evt.type, true));
+//					if ( evt.type == BaseModel.STATE_NEW) lItems.dataProvider.addItem( cItemEdit.data);
+//					lItems.dataProvider.itemUpdated( item);
+				}
+				
+				protected function handleLocationAdd( evt:Event):void {
+					debug( " loc ["+evt.type+"] "+_location);
+					
+					_location = SignsLocation( cLocationEdit.data);
+					format();
+					dispatchEvent( new TopEvent( evt.type, true));
+					//					if ( evt.type == BaseModel.STATE_NEW) lItems.dataProvider.addItem( cItemEdit.data);
+					//					lItems.dataProvider.itemUpdated( item);
+				}
+				
+				//-------------------------------------------------------------------------------------------------------------------------------------------
+
+				protected function addRootItem( event:MouseEvent):void {
+					
+					var item:SignsItem = new SignsItem();
+					item.location_id = _location.id;
+					item.cache_location_id = _location.cache_id;
+					item.type = 0x10;
+					
+					debug( "new root item ["+item+"]");
+					editItem( item, lItems);					
+				}
+				
+				protected function itemNew( evt:TopEvent):void {
+					var parentItem:SignsItem = evt.item;	// TopItem( lItems.selectedItem);
+					
+					var parType:String = parentItem.type.toString( 16).substr(0, 2);
+					var parT:String = parType.substr(0, 2);
+					var nType:int;
+					
+					switch( parT) {
+						case '10': nType = 0x20; break;
+						case '20': nType = 0x28; break;
+						
+						default:
+							nType = 0x10;
+					}
+					
+					var item:SignsItem = new SignsItem( { parent_id:parentItem.id, cache_parent_id:parentItem.cache_id, location_id:_location.id, cache_location_id:_location.cache_id, name:"", value:"", type:nType});
+/*
+					item.parent_id = parentItem.id;
+					item.cache_parent_id = parentItem.cache_id;
+					
+					item.location_id = _location.id;
+					item.cache_location_id = _location.cache_id;
+*/					
+					debug( "new item ["+parType+":"+parT+":"+nType.toString(16)+"] : "+item);
+					
+					if ( item != null) editItem( item, evt.parent);
+				}
+				
+				protected function itemOkay( evt:TopEvent):void {
+					var item:SignsItem = evt.item;	// TopItem( lItems.selectedItem);
+					
+					var action:SignsAction = new SignsAction( {	item_id:item.id, cache_item_id:item.cache_id, type:AppSettings.ACTION_DOCUMENT, status:AppSettings.STATUS_OK, url:null, cache_url:null, name:item.name, description:item.toString()});
+					logItemAction( action);	//AppSettings.ACTION_DELETE);
+
+					debug( "okay item: "+item);
+				}
+				
+				protected function itemDelete( evt:TopEvent):void {
+					var item:SignsItem = evt.item;	// TopItem( lItems.selectedItem);
+					
+					var action:SignsAction = new SignsAction( {	item_id:item.id, cache_item_id:item.cache_id, type:AppSettings.ACTION_DELETE, status:AppSettings.STATUS_DELETED, url:null, cache_url:null, name:item.name, description:item.toString()});
+					logItemAction( action);	//AppSettings.ACTION_DELETE);
+					
+					debug( "delete item: "+item);
+				}
+				
+				protected function itemEdit( evt:TopEvent):void {
+					var item:SignsItem = evt.item;	// TopItem( lItems.selectedItem);
+					debug( "editItem: "+item);
+					
+					if ( item != null) editItem( item, evt.parent);
+					//DisplayObjectContainer( evt.target)
+				}
+				
+				protected function editItem( item:SignsItem, dParent:DisplayObjectContainer=null):void {
+				
+					if ( item == null) return;
+					
+					var eEvt:TopEvent = new TopEvent( TopEvent.ITEM_EDIT);
+					eEvt.item = item;
+					
+					dispatchEvent( eEvt);
+					
+					if ( cItemEdit == null) {
+						cItemEdit = new ItemEditCallout();
+						
+						cItemEdit.horizontalPosition = 'middle';
+						cItemEdit.verticalPosition = 'middle';
+						
+						cItemEdit.addEventListener( TopEvent.ITEM_SAVE_ERROR, handleItemCancel);
+						cItemEdit.addEventListener( TopEvent.ITEM_SAVED, handleItemSave);
+						cItemEdit.addEventListener( TopEvent.ITEM_ADD, handleItemAdd);
+					}
+					
+					cItemEdit.data = item;
+					
+					if ( cItemEdit.isOpen) cItemEdit.close( false);
+					
+					var s:DisplayObjectContainer = this.parentApplication as DisplayObjectContainer;
+					cItemEdit.open( s, false);	// dParent, false);
+				}
+				
+				protected function handleItemCancel( evt:Event):void {
+					debug( "cancel.");
+				}
+				
+				protected function handleItemSave( evt:TopEvent):void {
+					debug( "saved ["+evt.type+"] "+cItemEdit.data);
+					
+					var item:SignsItem = SignsItem( cItemEdit.data);
+					
+					lItems.dataProvider.itemUpdated( item);
+/*
+					var desc:String = item.toString();
+					if ( TopEvent( evt).description != null && TopEvent( evt).description.length > 0) desc += "\n"+TopEvent( evt).description;
+					
+					var action:SignsAction = new SignsAction( {	item_id:item.id, cache_item_id:item.cache_id, type:AppSettings.ACTION_EDIT, status:AppSettings.STATUS_OK, url:null, cache_url:null, name:item.name, description:desc});
+					logItemAction( action);	//AppSettings.ACTION_EDIT);
+*/
+					dispatchEvent( new TopEvent( evt.type));
+				}
+				
+				protected function handleItemAdd( evt:TopEvent):void {
+					debug( "saved ["+evt.type+"] "+cItemEdit.data);
+					
+					var item:SignsItem = SignsItem( cItemEdit.data);
+					
+					lItems.dataProvider.addItem( cItemEdit.data);
+//					lItems.dataProvider.itemUpdated( item);
+/*					
+					var desc:String = item.toString();
+					if ( TopEvent( evt).description != null && TopEvent( evt).description.length > 0) desc += "\n"+TopEvent( evt).description;
+					
+					var action:SignsAction = new SignsAction( {	item_id:item.id, cache_item_id:item.cache_id, type:( cItemEdit.addModeCreate ? AppSettings.ACTION_CREATE : AppSettings.ACTION_ADD), status:AppSettings.STATUS_OK, url:null, cache_url:null, name:item.name, description:desc});
+					logItemAction( action);	//AppSettings.ACTION_NEW);
+*/					
+					dispatchEvent( new TopEvent( evt.type));
+				}
+/*				
+				protected function itemOptions( evt:Event):void {
+					debug( "options "+evt);
+				}
+*/				
+				protected function itemAction( evt:TopEvent):void {
+					var action:SignsAction = new SignsAction();
+					action.item_id = evt.item.id;
+					action.cache_item_id = evt.item.cache_id;
+					action.status = AppSettings.STATUS_ERROR;
+					action.type = AppSettings.ACTION_DOCUMENT;
+					
+					debug( "action: "+action);
+					
+					if ( action != null) editAction( action, evt.parent);
+				}
+				
+				protected function itemDocument( evt:TopEvent):void {
+					var action:SignsAction = new SignsAction();
+					action.item_id = evt.item.id;
+					action.cache_item_id = evt.item.cache_id;
+					action.status = AppSettings.STATUS_OK;
+					action.type = AppSettings.ACTION_DOCUMENT;
+					
+					debug( "document: "+action);
+					
+					if ( action != null) editAction( action, evt.parent);
+				}
+				
+				protected function editAction( action:SignsAction, dParent:DisplayObjectContainer=null):void {
+					
+					if ( action == null) return;
+					
+					if ( cActionAdd == null) {
+						cActionAdd = new ActionCallout();
+
+//						cActionAdd.horizontalPosition = 'middle';
+//						cActionAdd.verticalPosition = 'middle';
+						
+						cActionAdd.addEventListener( TopEvent.ITEM_ACTION_ERROR, handleActionCancel);
+						cActionAdd.addEventListener( TopEvent.ITEM_ACTION, handleActionSaved);
+					}
+					
+					cActionAdd.data = action;
+					
+					if ( cActionAdd.isOpen) cActionAdd.close( false);
+					
+					cActionAdd.open( dParent, false);
+				}
+				
+				protected function handleActionCancel( evt:Event):void {
+					postIE = null;
+
+					debug( "cancel.");
+				}
+				
+				protected function handleActionSaved( evt:Event):void {
+					debug( "saved ["+evt.type+"] "+cActionAdd.data);
+					
+					var action:SignsAction = SignsAction( cActionAdd.data);
+					
+//					logItemAction( action);	//new SignsItem( { item_id:action.item_id, cache_item_id:action.cache_item_id}), action);
+
+					debug( "setting location status ["+action.status+"]");
+					_location.status = action.status;
+					if ( postIE != null) postIE.status = action.status;
+					
+					postIE = null;
+					dispatchEvent( new TopEvent( evt.type));
+				}
+				
+				//===========================================================================================================
+
+				public function itemOpenOptions( evt:TopEvent):void {
+					
+					if ( cbOptions.isOpen && cbOptions.item == evt.item ) cbOptions.close();
+					else {
+						cbOptions.item = evt.item;
+						
+						if ( cbOptions.isOpen) cbOptions.owner = evt.parent;
+						else cbOptions.open( evt.parent, false);
+						
+//						cbOptions.horizontalPosition="before"; 
+//						cbOptions.verticalPosition="middle";
+						cbOptions.invalidateSkinState();
+						cbOptions.updatePopUpPosition();
+						
+						if ( cbHistory.isOpen) cbHistory.close();
+					}
+					
+					postIE = evt.parent as ItemItemRenderer;
+					
+					debug( "toggle options dropdown.");
+				}
+				
+				protected function closeItemOptions( evt:Event):void {
+					debug( "option change.");
+					//					if ( cItemEdit.data != TopItem( lItems.selectedItem))
+					//					if ( cbOptions != null && cbOptions.isOpen) cbOptions.close();
+				}
+				
+				public function itemHistory( evt:TopEvent):void {
+					cbHistory.location = this._location;
+					cbHistory.item = evt.item;
+					if ( !cbHistory.isOpen) cbHistory.open( evt.parent, false);
+					else cbHistory.owner = evt.parent;
+				}
+				
+				//===========================================================================================================
+				
+				public function itemBrowseForFile( evt:TopEvent):void {
+					prepIFS();
+					snapshotAction = AppSettings.ACTION_DOCUMENT;
+					ifs.itemBrowseForFile( evt.item, evt.parent);
+				}
+				
+				public function itemSelectCameraRoll( evt:TopEvent):void {
+					prepIFS();
+					snapshotAction = AppSettings.ACTION_DOCUMENT;
+					ifs.itemSelectCameraRoll( evt.item, evt.parent);
+				}
+				
+				public function itemDoSnapshot( evt:TopEvent):void {
+					debug( "snapshot OK");
+					prepIFS();			
+					snapshotAction = AppSettings.ACTION_DOCUMENT;
+					ifs.itemDoSnapshot( evt.item, evt.parent);
+				}
+
+				public function itemDoSnapshotPref( evt:TopEvent):void {
+					debug( "snapshot PREFERRED");
+					prepIFS();			
+					snapshotAction = AppSettings.ACTION_MARK;
+					
+					if ( CameraUI.isSupported) {
+						ifs.itemDoSnapshot( evt.item, evt.parent);
+					} else {
+						ifs.itemBrowseForFile( evt.item, evt.parent);
+					}
+				}
+				
+				protected function prepIFS():void {
+					if ( ifs == null) {
+						ifs = new ImageFileSelector2();
+						ifs.addEventListener( TopEvent.ITEM_ATTACHED, mediaAttached);
+					}
+				}
+				
+				protected function mediaAttached( evt:TopEvent):void {
+					var action:SignsAction = new SignsAction( {	item_id:evt.item.id, cache_item_id:evt.item.cache_id, type:snapshotAction, status:AppSettings.STATUS_NOP, url:evt.url, cache_url:evt.cache_url, name:null, description:null});
+					logItemAction( action);
+				}
+				
+				//===========================================================================================================
+
+				public function logItemAction( action:SignsAction):void {
+					
+					var tu:SignsUser = AppSettings.getUser();
+					action.user_id = tu.id;
+					action.cache_user_id = tu.cache_id;
+					
+					action.cache_project_id = AppSettings.currentProject.cache_id;
+					action.project_id = AppSettings.currentProject.id;
+
+					debug( "saved item["+action.item_id+"] ["+action.toString()+"]");
+
+					debug( "setting location status ["+action.status+"]");
+					_location.status = action.status;
+					if ( postIE != null) postIE.status = action.status;
+					
+					if ( AppSettings.online) {
+						action.callService( 'save', actionSaved, faultHandler);
+					} else {
+						action.cache_modified = new Date();
+						action.save();
+						
+						debug( "saved item action ["+action+"]");
+					}
+				}
+				
+				protected function actionSaved( evt:ResultEvent, token:Object=null):void {
+					
+					var res:Array = evt.result as Array;
+					var item:StatusModel = new StatusModel( res[0]);
+					/*				
+					var chg:PoiEvent;
+					if ( _item.id < 0) {
+					_item.id = parseInt( item.id);
+					
+					chg = new PoiEvent( PoiEvent.ITEM_ADD);
+					} else {
+					chg = new PoiEvent( PoiEvent.ITEM_SAVED);
+					}
+					_item.modified = item.modified;
+					*/			
+					debug( "saved item action remote ["+item+"]");
+					//				dispatchEvent( chg);
+				}
+				
+				private function faultHandler( fault:FaultEvent, token:Object=null):void {
+					debug( "err: "+fault);
+					debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+					
+					dispatchEvent( new TopEvent( TopEvent.ITEM_SAVE_ERROR));
+				}
+
+				//===========================================================================================================
+
+				protected function debug( s:String):void {
+					trace( this.className+": "+s);
+				}				
+			]]>
+		</fx:Script>
+	<s:layout>
+		<s:VerticalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="5"/>
+	</s:layout>
+	<!-- s:layout.phone_landscape>
+		<s:HorizontalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="5"/>
+	</s:layout.phone_landscape -->
+	<s:VGroup width="100%">
+		<ns2:ProjectSelect id="selProject" width="100%"/>
+		<s:HGroup width="100%" paddingRight="3" verticalAlign="middle">
+			<s:BorderContainer id="locationView" width="100%" backgroundAlpha="0.6"
+							   backgroundColor="0xf0f0f0" borderWeight="1" click="handleLocationEdit(event)"
+							   cornerRadius="5" horizontalCenter="0" verticalCenter="0">
+				<s:layout>
+					<s:HorizontalLayout paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="5"
+										verticalAlign="middle"/>
+				</s:layout>
+				<s:VGroup width="100%">
+					<s:Label id="lLocName" width="100%" styleName="locationItemName"/>
+					<s:HGroup width="100%">
+						<s:Label id="lType" styleName="locationItemId"/>
+						<s:Label text="-" styleName="locationItemId"/>
+						<s:Label id="tag_major" styleName="locationItemId"/>
+						<s:Label text="-" styleName="locationItemId"/>
+						<s:Label id="tag_minor" styleName="locationItemId"/>
+					</s:HGroup>
+				</s:VGroup>
+			</s:BorderContainer>
+			<s:Button id="bAddLoc" height="{bAddLoc.width}" label="Neu" click="addLocation(event)"
+					  emphasized="true"/>
+		</s:HGroup>	
+		<s:HGroup width="100%" paddingRight="3" verticalAlign="middle">
+			<s:Label fontWeight="bold" text="Objekte"/>
+			<s:Spacer width="25" height="100%"/>
+			<s:Button id="bAdd" height="{bAdd.width}" label="Neu" click="addRootItem(event)" emphasized="true"
+					  enabled="false"/>
+			<s:Spacer width="100%" height="100%"/>
+		</s:HGroup>
+	</s:VGroup>
+	<!-- s:BorderContainer width="100%" height="100%" backgroundColor="0xe0e0e0" borderColor="0"
+					   borderWeight="1" contentBackgroundColor="0xe0e0e0" cornerRadius="5" horizontalCenter="0"
+					   verticalCenter="0">
+		<s:layout>
+			<s:BasicLayout/>
+		</s:layout -->
+	<s:Group width="100%" height="100%">
+		<s:layout>
+			<s:BasicLayout/>
+		</s:layout>
+		<s:List id="lItems" width="100%" height="100%" contentBackgroundColor="#FFFFFF"
+				itemRenderer="de.ms_ite.mobile.topplan.renderer.ItemItemRenderer"
+				selectionColor="0x80ff80">
+			<s:layout>
+				<s:VerticalLayout gap="1" variableRowHeight="true"/>
+			</s:layout>
+		</s:List>
+		<s:BusyIndicator id="itemsLoading" horizontalCenter="0" verticalCenter="0" visible="false"/>		
+	</s:Group>
+	<!-- /s:BorderContainer -->
+</s:View>

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:HGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+						xmlns:s="library://ns.adobe.com/flex/spark"
+						creationComplete="initUI(event)" 
+						minWidth="300">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import models.SignsProject;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.events.ListEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+									
+			protected var _cache_id:int;
+			protected var _currentProject:SignsProject;
+			
+			protected var _options:ArrayCollection = new ArrayCollection();
+			
+			protected static var projectModel:SignsProject;
+			protected var _defChromeColor:int;
+			
+			protected function initUI(event:Event):void {
+				findSelected();
+				
+				_defChromeColor = cbProject.getStyle( 'chromeColor');
+				cbProject.setStyle( 'chromeColor', 0xFFC231);
+			}
+			
+			protected function getProjects():void {
+				if ( projectModel == null) projectModel = new SignsProject();
+
+				_options.addAll( projectModel.list());
+			}
+			
+			public function get project_id():int {
+				return projectModel.id;
+			}
+			
+			public function set project_id( val:int):void {
+//				getOwner( val);
+				
+//				lOwner.text = ownerModel.name;
+			}
+			
+			public function get cache_project_id():int {
+				return _cache_id;
+			}
+			
+			public function set cache_project_id( val:int):void {
+				_cache_id = val;
+				
+				if ( _options == null) getProjects();
+				
+				findSelected();
+			}
+			
+			protected function findSelected():void {
+				
+				if ( _options == null || _options.length == 0) getProjects();
+				
+				for( var i:int = 0; i < _options.length; i++) {
+					var opt:SignsProject = _options.getItemAt( i) as SignsProject;
+					
+					if ( _cache_id != 0 && opt.cache_id == _cache_id) {
+						lProjects.selectedItem = opt;
+						_currentProject = opt;
+						AppSettings.currentProject = _currentProject;
+						break;
+					}
+				}
+				
+				debug( "owner #"+i+" / "+_options.length);
+			}
+			
+			protected function updateSelection():void {
+
+				_currentProject = SignsProject( lProjects.selectedItem);
+				AppSettings.currentProject = _currentProject;
+
+				if ( _currentProject != null) {
+					cbProject.label = "Project: "+_currentProject.name;
+					_cache_id = _currentProject.cache_id;
+					
+					cbProject.setStyle( 'chromeColor', _defChromeColor);
+				} else cbProject.setStyle( 'chromeColor', 0xFFC231);
+				debug( "owner #"+cbProject.label);
+			}
+			
+			protected function handleChange( evt:IndexChangeEvent):void {
+				updateSelection();
+				cbProject.closeDropDown();
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}						
+			
+			protected function handleClose(event:DropDownEvent):void {
+				updateSelection();
+			}
+			
+			protected function handleAddClose(event:DropDownEvent):void {
+			}
+			
+			protected function doSave(event:MouseEvent):void {
+				
+				var pj:SignsProject = new SignsProject( { name:tiName.text, description:taDesc.text, cache_modified:new Date()});
+
+				pj.save();
+				
+				_options.addItem( pj);
+				lProjects.selectedItem = pj;
+				
+				updateSelection();
+				
+				cbAdd.closeDropDown();
+			}
+			
+		]]>
+	</fx:Script>
+	<!-- s:Label text="Project:"/ -->
+	<s:CalloutButton id="cbProject" width="100%" label="Select project ..."
+					 close="handleClose(event)" verticalPosition="after">
+		<s:List id="lProjects" labelField="name" width="100%" height="100%" dataProvider="{_options}" change="handleChange( event)"/>
+	</s:CalloutButton>
+	<s:CalloutButton id="cbAdd" label="+" close="handleAddClose(event)" verticalPosition="after">
+		<s:calloutLayout>
+			<s:VerticalLayout gap="4" paddingTop="4" paddingLeft="4" paddingBottom="4" paddingRight="4"/>
+		</s:calloutLayout>
+		<s:TextInput id="tiName" width="100%" tabIndex="1"/>
+		<s:TextArea id="taDesc" width="100%" height="80" tabIndex="2"/>
+		<s:Button id="bSave" label="Save" click="doSave(event)" tabIndex="3"/>
+	</s:CalloutButton>
+</s:HGroup>

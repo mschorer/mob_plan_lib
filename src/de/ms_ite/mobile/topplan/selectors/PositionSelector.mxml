@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  minWidth="140" creationComplete="initUI(event)" gap="0"
+		  verticalAlign="bottom">
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.components.DropDownList;
+			import spark.components.SpinnerList;
+			import spark.components.SpinnerListContainer;
+			import spark.components.supportClasses.ListBase;
+			import spark.events.IndexChangeEvent;
+			
+			protected var _pos:int = -1;
+			protected var _vals:ArrayCollection;
+			
+			protected var _posList:ListBase;
+			
+			protected function initUI( evt:FlexEvent):void {
+				
+				if ( _pos >= 0) value = _pos;
+			}
+			
+			override protected function createChildren():void {
+				
+				if ( AppSettings.isDesktop) {
+					var ddl:DropDownList = new DropDownList();
+					//					ddl.labelField = "@name";
+					ddl.requireSelection = true;
+					ddl.percentWidth = 100;
+					ddl.addEventListener( Event.CHANGE, selectionChanged);
+					ddl.setStyle( 'interactionMode', 'mouse');
+					
+					addElement( ddl);
+					
+					_posList = ddl;
+				} else {
+					var dlc:SpinnerListContainer = new SpinnerListContainer();
+					dlc.percentWidth = 100;
+					dlc.height = 140;
+					
+					addElement( dlc);
+					
+					var spl:SpinnerList = new SpinnerList();
+					spl.percentWidth = 100;
+					spl.addEventListener( Event.CHANGE, selectionChanged);
+					spl.wrapElements = false;
+					
+					dlc.addElement( spl);
+					
+					_posList = spl;
+				}
+				_posList.dataProvider = _vals = AppSettings.getPositions();
+				
+				super.createChildren();
+			}
+			
+			public function set value( pos:int):void {
+
+				debug( "set pos ["+pos+":"+_pos+"]");
+
+				if ( _pos == pos) return;
+				_pos = pos;
+				
+				if ( _posList == null) return;
+				
+				var idx:int = getIndexOfValue( _pos);
+				if ( idx < 0) getIndexOfValue( Math.abs( _pos));
+				
+				if ( idx < 0) {
+					debug( "  pos not found ["+pos+"]");
+					_posList.selectedIndex = 0;					
+				} else {
+					_posList.selectedIndex = idx;
+				}
+			}
+			
+			public function get value():int {
+				return _pos;	
+			}
+			
+			protected function getIndexOfValue( pos:int):int {
+				
+				for( var i:int = 0; i < _vals.length; i++) {
+					if ( _vals.getItemAt(i).data == pos) return i;
+				}
+				
+				return -1;
+			}
+			
+			protected function selectionChanged(event:IndexChangeEvent):void {
+				_pos = parseInt( _posList.selectedItem.data);
+			}
+	
+			protected function debug( s:String):void {
+				//trace( this.className+": "+s);
+			}
+		]]>
+	</fx:Script>
+	<s:Label text="Ausrichtung:" styleName="spinnerLabel"/>
+	<!-- s:SpinnerListContainer width="100%" height="140" visible.mobile="true" includeInLayout.mobile="true" visible="false" includeInLayout="false">
+		<s:SpinnerList id="slPosition" width="100%" height="100%" change="valChanged(event)"
+					   labelField="label" selectedIndex="0">
+		</s:SpinnerList>
+	</s:SpinnerListContainer>
+	<s:DropDownList id="slPosition2" interactionMode="mouse" width="100%" change="valChanged(event)" labelField="label" 
+					visible.desktop="true" includeInLayout.desktop="true" visible="false" includeInLayout="false"/ -->
+</s:VGroup>

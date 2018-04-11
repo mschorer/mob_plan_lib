@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Callout xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark" creationComplete="initUI(event)"
+		   xmlns:ns="de.ms_ite.mobile.*"
+		   xmlns:ns1="de.ms_ite.mobile.topplan.components.*" 
+		   width="450"
+		   focusOut="handleClose(event)" click="handleClose( event)">
+	<fx:Declarations>
+		<s:DateTimeFormatter id="fmt" dateTimePattern="yyyyMMdd_HHmmss" />
+		<!-- s:RemoteObject id="locService" fault="faultHandler( event)" source="Topplan" destination="amfphp">
+			<s:method name="getActions" result="listActions( event);" />
+		</s:RemoteObject -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.IContainerProvider;
+			import de.ms_ite.mobile.topplan.IImagePreviewContainer;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			import de.ms_ite.mobile.topplan.renderer.ItemHistoryRenderer;
+			
+			import flash.data.SQLResult;
+			
+			import models.Model;
+			import models.RetrievalParameters;
+			import models.SignsAction;
+			import models.SignsItem;
+			import models.SignsLocation;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.components.SkinnableContainer;
+			
+			protected static var action:SignsAction;
+			protected var _item:SignsItem;
+			protected var _location:SignsLocation;
+			protected var _data:ArrayCollection;
+			protected var _isLoading:Boolean = false;
+			
+			protected var histOffset:int = 0;
+			protected var histPagesize:int = 5;
+			
+			protected var imageCallout:IImagePreviewContainer;
+			
+			protected function initUI(event:FlexEvent):void {
+				// TODO Auto-generated method stub
+				
+				if ( _data != null && lHistory != null) updateStatus();
+				if ( biLoading != null) biLoading.visible = _isLoading;
+				
+				lHistory.addEventListener(TopEvent.EXPAND_LIST, expandList);
+				lHistory.addEventListener(TopEvent.IMAGE_ZOOM, previewImage);
+			}
+			
+			protected function expandList( evt:TopEvent):void {
+				debug( "expand list");
+				histPagesize += 5;
+				getActions();
+			}
+			
+			public function set item( it:SignsItem):void {
+				debug( "set item.");
+				
+//				if ( _item == null || _item.id != it.id) {
+					_item = it;
+					getActions();
+//				}
+			}
+			
+			public function set location( l:SignsLocation):void {
+				debug( "set locations.");
+				_location = l;
+			}
+			
+			protected function getActions():void {
+				debug( "get item history["+_item.id+"]");
+				
+				if ( action == null) action = new SignsAction();
+				if ( _data == null) _data = new ArrayCollection();
+				_data.removeAll();
+				
+				action.item_id = _item.id;
+				
+				if ( AppSettings.online) {
+					action.callService( 'list', listActions, faultHandler);
+					
+					//				locService.getOperation( 'getActions').send( _item.id);
+					isLoading = true;
+					if ( lHistory != null) lHistory.dataProvider = null;
+				} else {
+					
+					var resp:Responder = null;
+
+					if ( Model.asyncMode) resp = new Responder( asyncActions, action.defaultSqlErrorResponder);
+					
+					var rc:ArrayCollection = action.list( new RetrievalParameters( {cache_item_id:_item.cache_id}, true, 'cache_modified DESC', histOffset+", "+histPagesize), resp);
+					
+					if ( rc != null) {
+						_data.addAll( rc);
+						histReady();
+					}
+				}
+			}
+			
+			protected function asyncActions( sqe:SQLResult):void {
+				var rc:ArrayCollection = action.addResult( sqe, _data);
+				
+				if ( rc != null) histReady();
+			}
+
+			protected function listActions( evt:ResultEvent, token:Object=null):void {
+				
+				var res:Array = evt.result as Array;
+				
+				if ( res != null && res.length > 0) {
+					debug( "get items #"+res.length);
+					
+					_data.addAll( new ArrayCollection( res));
+				} else {
+					debug( "get items #0");
+				}
+				histReady();
+			}
+			
+			protected function histReady():void {
+				isLoading = false;
+				
+				if ( _data.length == histPagesize) {
+					// we probably have more hist elements
+					debug( "-- more hist!!!");
+					_data.addItem( new Object());
+				}
+				
+				updateStatus();
+			}
+/*			
+			protected function setActions( data:ArrayCollection):void {
+				if ( _data == null) _data = new ArrayCollection();
+				_data.removeAll();
+
+				_data.addAll( data);
+				
+				if ( data.length == histPagesize) {
+					// we probably have more hist elements
+					debug( "-- more hist!!!");
+					_data.addItem( new Object());
+				}
+
+				updateStatus();
+			}
+*/			
+			protected function updateStatus():void {
+				if ( lHistory != null) {
+					lHistory.enabled = ( _data != null && _data.length > 0);
+					noData = ( _data == null || _data.length == 0);
+					
+					vlList.requestedRowCount = Math.max( 1, Math.min( 5, ( _data == null) ? 0 : _data.length));
+				}
+			}
+			
+			private function faultHandler( fault:FaultEvent, token:Object=null):void {
+				debug( "err: "+fault);
+				debug( "code:\n" + fault.fault.faultCode + "\n\nMessage:\n" + fault.fault.faultString + "\n\nDetail:\n" + fault.fault.faultDetail);
+				isLoading = false;
+			}
+			
+			protected function set isLoading( f:Boolean):void {
+				_isLoading = f;
+				if ( biLoading != null) biLoading.visible = f;
+			}
+			
+			protected function get isLoading():Boolean {
+				return _isLoading;
+			}
+			
+			protected function set noData( f:Boolean):void {
+				lNoData.visible = f;
+			}
+			
+			protected function handleClose(event:Event):void {
+				// TODO Auto-generated method stub
+				this.close();
+				trace( "closed.");
+			}			
+
+			//===========================================================================================================
+			
+			protected function previewImage( evt:TopEvent):void {
+				debug( "zoom");
+				
+//				if ( imageCallout == null) {
+					imageCallout = IContainerProvider( this.parentApplication).getPreviewContainer();
+//				}
+				
+				imageCallout.title = ( _location != null) ? _location.tag_major+"-"+_location.tag_minor : ""+_item.id;
+				imageCallout.image = evt.source;
+				imageCallout.show( this.owner, false);
+				
+				evt.stopImmediatePropagation();
+			}
+
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}				
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:BasicLayout/>
+	</s:layout>
+	<s:List id="lHistory" width="100%" dataProvider="{_data}" height="100%" horizontalScrollPolicy="off" itemRenderer="de.ms_ite.mobile.topplan.renderer.ItemHistoryRenderer">
+		<s:layout>
+			<s:VerticalLayout id="vlList" requestedRowCount="2" requestedMinRowCount="2" gap="0"/>
+		</s:layout>
+	</s:List>
+	<s:BusyIndicator id="biLoading" horizontalCenter="0" verticalCenter="0" visible="{isLoading}"/>
+	<s:Label id="lNoData" text="No History yet." visible="false" horizontalCenter="0" verticalCenter="0" />
+</s:Callout>

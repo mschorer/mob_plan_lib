@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:SpinnerListContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						xmlns:s="library://ns.adobe.com/flex/spark" creationComplete="initUI(event)" >
+	<fx:Declarations>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.components.Spinner;
+			import spark.events.IndexChangeEvent;
+			
+			protected var xmlTypes:XMLList = AppSettings.itemConnectionXML;
+			protected var nodata:XMLListCollection = new XMLListCollection( new XMLList( '<item name="---" data="0"/>'));
+			
+			protected var selectLevels:ArrayCollection;
+			
+			protected function initUI(event:FlexEvent):void {
+
+				debug( "init");
+				
+				buildControls();
+				selectTopDown( xmlTypes);
+			}
+			
+			protected function buildControls():void {
+				
+				if ( selectLevels != null) return;
+				
+				selectLevels = new ArrayCollection();
+				selectLevels.addItem( slCategory);
+				selectLevels.addItem( slType);
+				selectLevels.addItem( slSubType);
+			}
+
+			public function set value( type:int):void {
+				
+				var nd:String = type.toString( 16).toLowerCase();
+
+				buildControls();
+				selectTopDown( xmlTypes, 0, nd);
+			}
+			
+			public function get value():int {
+				var tp:int = -1;
+				var i:int = selectLevels.length -1;
+				
+				while( tp <= 0 && i >= 0) {
+					var selection:XML = XML( SpinnerList( selectLevels.getItemAt( i)).selectedItem); 
+					
+					tp = parseInt( selection.@data.toString(), 16);
+					i--;
+				}
+				
+				return tp;
+			}
+
+			protected function selectionChanged( evt:IndexChangeEvent):void {
+				for( var i:int = 0; i < selectLevels.length; i++) {
+					var sel:SpinnerList = SpinnerList( selectLevels.getItemAt( i));
+
+					if ( evt.target == sel) {
+						var xNode:XML = sel.selectedItem;
+						
+						debug( "  sel chg ["+i+"]: "+xNode.@name);						
+						selectTopDown( xNode.*, i+1);
+						break;
+					}
+				}
+			}
+
+			protected function selectTopDown( children:XMLList, level:int=0, data:String=null):void {
+				
+				var selector:SpinnerList = selectLevels.getItemAt( level) as SpinnerList;
+				
+				selector.dataProvider = ( children != null && children.length() > 0) ? new XMLListCollection( children) : nodata;
+				
+				var selNode:XML = selector.selectedItem; 
+				if ( data != null) {
+					var match:String = data.substr( 0, 2+level*2);
+					var xNode:XMLList = children.(attribute("data")==match);
+					
+					if ( xNode.length() > 0) {
+						selNode = xNode[0];
+						if ( selNode != null) {
+							selector.selectedItem = selNode;
+							debug( "  sel["+level+"]: "+selNode.@name);
+						}
+					}
+				}
+				
+				if ( selNode == null) selNode = children[0];
+				
+				debug( "set["+level+"]: #"+children.length());
+				
+				if ( level+1 < selectLevels.length) selectTopDown((selNode != null) ? selNode.* : null, level+1, data);
+			}
+
+				protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}			
+			
+		]]>
+	</fx:Script>
+	<s:SpinnerList id="slCategory" width="100%" height="100%" change="selectionChanged( event);"
+				   labelField="@name" wrapElements="false"/>
+	<s:SpinnerList width="20" height="100%" enabled="false" labelField="name" selectedIndex="1">
+		<s:ArrayList>
+			<fx:Object name="-" data="-1"></fx:Object>
+		</s:ArrayList>
+	</s:SpinnerList>
+	<s:SpinnerList id="slType" width="80%" height="100%" change="selectionChanged( event);" labelField="@name" wrapElements="false"/>
+	<s:SpinnerList width="20" height="100%" enabled="false" labelField="name" selectedIndex="1">
+		<s:ArrayList>
+			<fx:Object name="-" data="-1"></fx:Object>
+		</s:ArrayList>
+	</s:SpinnerList>
+	<s:SpinnerList id="slSubType" width="100%" height="100%" labelField="@name" wrapElements="false"/>
+</s:SpinnerListContainer>

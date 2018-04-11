@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark"
+				xmlns:components="de.ms_ite.mobile.topplan.components.*"
+				width="100%" minHeight="25" click="clickItem(event)"
+				creationComplete="initUI(event)" currentState="default">
+	<s:layout>
+		<s:VerticalLayout gap="2" paddingBottom="1"
+						  paddingBottom.post="0" paddingLeft.post="0" paddingRight.post="0"
+						  paddingTop.post="0"/>
+	</s:layout>
+	<s:states>
+		<s:State name="default"/>
+		<s:State name="post"/>
+		<s:State name="sign"/>
+		<s:State name="subsign"/>
+		<s:State name="label"/>
+		<s:State name="info"/>
+	</s:states>
+	<fx:Declarations>
+		<s:DateTimeFormatter id="fmt" dateTimePattern="yyyyMMdd_HHmmss" />
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import de.ms_ite.mobile.topplan.AppSettings;
+			import de.ms_ite.mobile.topplan.events.TopEvent;
+			
+			import models.SignsItem;
+			import models.SignsOwner;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.XMLListCollection;
+			
+			protected var _data:SignsItem;
+			protected var _typeNode:XML;
+			
+			protected function initUI( event:Event):void {
+			}
+			
+			override public function set data( dest:Object):void {
+				super.data = dest;
+				
+				if ( dest != 0 && dest != null) {
+					if ( dest is SignsItem) _data = SignsItem( dest);
+					else _data = new SignsItem( dest);
+					
+					lSort.text = "["+_data.sort+"]";
+					
+					lStatus.status = _data.status;
+					
+					var nd:String = _data.type.toString( 16).toLowerCase();
+					lType.text = getTypePath( nd);
+					
+					lDirection.text = AppSettings.getPosition( _data.position);
+
+					lOwner.text = "#"+(( _data.owner_id > 0) ? SignsOwner( AppSettings.ownerList.source[ AppSettings.ownerIndexById( _data.owner_id)]).name : '---');	// .getItemAt(
+					
+					tiName.text = _data.name;
+					tiValue.text = _data.value;
+					
+					taDescription.visible = taDescription.includeInLayout = ( _data.description != null && _data.description.length > 0);
+					taDescription.text = _data.description;
+
+					taIcons.visible = taIcons.includeInLayout = ( _data.icons != null && _data.icons.length > 0);
+					taIcons.text = "["+_data.icons+"]";
+
+					bcBack.setStyle( 'backgroundColor', colorCode( nd));
+
+					currentState = getRenderMode();
+/*					
+					if ( _data.subItems != null && _data.subItems.length > 0) {
+						hgSub.visible = hgSub.includeInLayout = true;
+						subItems.dataProvider = _data.subItems;
+					} else {
+						hgSub.visible = hgSub.includeInLayout = false;
+						subItems.dataProvider = null;						
+					}
+*/
+				} else {
+					
+				}
+			}
+			
+			override public function get data():Object {
+				return _data;
+			}
+			
+			public function set status( s:int):void {
+				lStatus.status = s;
+			}
+			
+			protected function colorCode( nd:String):int {
+				var cc:int = 0xd0d0d0;
+
+				var xNode:XMLList = AppSettings.itemTypeXML.(@data==nd);
+				if ( xNode.length() == 0) xNode = AppSettings.itemTypeXML.descendants().(@data==nd);
+				
+				var node:XML = (xNode.length() > 0) ? xNode[0] : null;
+
+				while( node != null) {
+					if ( "@color" in node) {
+						var col:int = parseInt( node.@color, 16);
+						
+						if ( col >= 0) {
+							cc = col;
+							break;
+						}
+					}
+					node = node.parent();
+				}
+				
+				return cc;
+			}
+			
+			protected function getTypePath( nd:String):String {
+
+				var xNode:XMLList = AppSettings.itemTypeXML.(@data==nd);
+				if ( xNode.length() == 0) xNode = AppSettings.itemTypeXML.descendants().(@data==nd);
+
+				var node:XML = (xNode.length() > 0) ? xNode[0] : null;
+				_typeNode = node;
+				
+				var path:String = '';
+				while ( node != null) {
+					path = node[0].@name + ((path.length > 0) ? ' - ' : '') + path;
+					
+					node = node.parent();
+				}
+				
+				return ( path.length > 0) ? path : nd;
+			}
+			
+			protected function getRenderMode():String {
+				var renderMode:String = 'default';
+				var nd:XML = _typeNode;
+				
+				while( nd != null) {
+					if ( "@render" in nd) {
+						renderMode = nd.@render;
+						break;
+					}
+					nd = nd.parent();
+				}
+				
+				return renderMode;
+			}
+			
+			protected function clickItem(event:MouseEvent):void {
+				debug( "item edit "+_data.toString());
+				// TODO Auto-generated method stub
+				
+				//dispatchEvent( new PoiEvent( PoiEvent.ITEM_EDIT, true));
+				openCallout( event);
+			}
+			
+			protected function openCallout( event:Event):void {
+
+				event.stopPropagation();
+
+				var evt:TopEvent = new TopEvent( TopEvent.ITEM_OPTIONS, true);
+				evt.item_id = SignsItem( _data).id;
+				evt.user_id = 10;
+				evt.item = _data;
+				evt.parent = this;
+				
+				dispatchEvent( evt);
+				
+				debug( "item options");
+			}
+			
+			protected function debug( s:String):void {
+				trace( this.className+": "+s);
+			}
+		]]>
+	</fx:Script>
+	<s:BorderContainer id="bcBack" width="100%" backgroundAlpha="0.6" borderWeight="1"
+					   cornerRadius="3" horizontalCenter="0" verticalCenter="0">
+		<!--
+					   backgroundColor="0xffffff" backgroundColor.post="0xd0d0d0"
+					   backgroundColor.sign="0xa0f0a0" backgroundColor.subsign="0xa0a0f0"
+					   backgroundColor.label="0xf0f0c0" backgroundColor.info="0xe0e0f0" -->
+		<s:layout>
+			<s:VerticalLayout gap="2" paddingBottom="2" paddingLeft="2" paddingRight="2"
+							  paddingTop="4" verticalAlign="middle"/>
+		</s:layout>
+		<s:HGroup width="100%" gap="2">
+			<s:Label id="lSort" styleName="sortLabel" text="[2]"
+					 horizontalCenter="0" verticalCenter="0"/>
+			<s:VGroup width="100%" gap="2">
+				<s:HGroup id="header" width="100%" gap="1"
+						  visible.label="false" includeInLayout.label="false">
+					<s:Label id="lOwner" width="30%" styleName="listItemOwner" showTruncationTip="true" visible="false" includeInLayout="false"/>
+					<s:Spacer width="5%" height="100%" visible="false" includeInLayout="false"/>
+					<s:Label id="lType" width="100%" height="100%" styleName="listItemType" showTruncationTip="true"
+							 textAlign="left"/>
+					<s:Spacer width="5%" height="100%"/>
+					<s:Label id="lDirection" visible="false" width="20%" height="100%"
+							 styleName="listItemDirection"
+							 includeInLayout="false" showTruncationTip="true" textAlign="right"
+							 visible.sign="true" includeInLayout.sign="true"/>
+				</s:HGroup>
+				<s:HGroup width="100%"
+						  visible.sign="false" includeInLayout.sign="false"
+						  visible.post="false" includeInLayout.post="false"
+						  visible.subsign="false" includeInLayout.subsign="false">
+					<s:Label id="tiName" width="70%" styleName="listItemName"/>
+					<s:Label id="tiValue" width="30%" styleName="listItemValue"/>
+				</s:HGroup>
+				<s:Label id="taDescription" width="100%" styleName="listItemDescription"
+						 visible="false" includeInLayout="false"/>			
+				<s:Label id="taIcons" width="100%" styleName="listItemIcons"
+						 visible="false" includeInLayout="false"/>			
+			</s:VGroup>
+			<components:ItemStatus id="lStatus" />
+		<!-- s:Image id="iOptions" source="@Embed('assets/settings_icon.png')" click="openCallout( event)"/ -->
+		</s:HGroup>
+		<!-- s:HGroup id="hgSub" width="100%" gap="0" paddingLeft="15">
+			<s:List id="subItems" width="100%"
+					itemRenderer="de.ms_ite.mobile.topplan.renderer.ItemItemRenderer"
+					horizontalScrollPolicy="off" verticalScrollPolicy="auto">
+				<s:layout>
+					<s:VerticalLayout requestedRowCount="2" rowHeight="30"/>
+				</s:layout>
+			</s:List>
+		</s:HGroup -->
+	</s:BorderContainer>
+</s:ItemRenderer>
